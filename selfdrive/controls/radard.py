@@ -222,13 +222,15 @@ def get_lead_adjacent(tracks: dict[int, Track], model_data: capnp._DynamicStruct
   return lead_dict
 
 
-def get_leads_lead(tracks: dict[int, Track], leadOne) -> dict[str, Any]:
+def get_lead_far(tracks: dict[int, Track], leadOne) -> dict[str, Any]:
   lead_dict = {'status': False}
 
-  toyota_corolla_length = 4.6355
-  leads_lead_tracks = [c for c in tracks.values() if leadOne.status and c.dRel > leadOne.dRel + toyota_corolla_length]
-  if len(leads_lead_tracks) > 0:
-    closest_track = min(leads_lead_tracks, key=lambda c: c.dRel)
+  if leadOne.status:
+    return lead_dict
+
+  far_lead_tracks = [c for c in tracks.values() if c.vLead > 1 and abs(c.yRel) < 1.5]
+  if len(far_lead_tracks) > 0:
+    closest_track = min(far_lead_tracks, key=lambda c: c.dRel)
     lead_dict = closest_track.get_RadarState()
 
   return lead_dict
@@ -315,11 +317,11 @@ class RadarD:
       self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, self.CP, self.frogpilot_toggles, sm['frogpilotCarState'], low_speed_override=False)
 
     if self.frogpilot_toggles.adjacent_lead_tracking and self.ready:
+      self.radar_state.leadFar = get_lead_far(self.tracks, self.radar_state.leadOne)
       self.radar_state.leadLeft = get_lead_adjacent(self.tracks, sm['modelV2'], sm['frogpilotPlan'].laneWidthLeft, left=True)
       self.radar_state.leadLeftFar = get_lead_adjacent(self.tracks, sm['modelV2'], sm['frogpilotPlan'].laneWidthLeft, left=True, far=True)
       self.radar_state.leadRight = get_lead_adjacent(self.tracks, sm['modelV2'], sm['frogpilotPlan'].laneWidthRight, left=False)
       self.radar_state.leadRightFar = get_lead_adjacent(self.tracks, sm['modelV2'], sm['frogpilotPlan'].laneWidthRight, left=False, far=True)
-      self.radar_state.leadsLead = get_leads_lead(self.tracks, self.radar_state.leadOne)
 
     # Update FrogPilot parameters
     if sm['frogpilotPlan'].togglesUpdated:

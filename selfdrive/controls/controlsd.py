@@ -65,7 +65,6 @@ ENABLED_STATES = (State.preEnabled, *ACTIVE_STATES)
 class Controls:
   def __init__(self, CI=None):
     self.params = Params()
-
     if CI is None:
       cloudlog.info("controlsd is waiting for CarParams")
       with car.CarParams.from_bytes(self.params.get("CarParams", block=True)) as msg:
@@ -185,15 +184,16 @@ class Controls:
     # FrogPilot variables
     self.frogpilot_toggles = get_frogpilot_toggles()
 
+    self.accel_pressed = False
     self.always_on_lateral_active = False
     self.always_on_lateral_active_previously = False
+    self.decel_pressed = False
     self.fcw_event_triggered = False
     self.no_entry_alert_triggered = False
     self.onroad_distance_pressed = False
-    self.resume_pressed = False
-    self.resume_previously_pressed = False
     self.steer_saturated_event_triggered = False
 
+    self.clip_curves = self.frogpilot_toggles.clipped_curvature_model
     self.radarless_model = self.frogpilot_toggles.radarless_model
     self.use_old_long = self.frogpilot_toggles.old_long_api
 
@@ -234,8 +234,8 @@ class Controls:
       return
 
     # Block resume if cruise never previously enabled
-    self.resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
-    if not self.CP.pcmCruise and not self.v_cruise_helper.v_cruise_initialized and self.resume_pressed:
+    resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
+    if not self.CP.pcmCruise and not self.v_cruise_helper.v_cruise_initialized and resume_pressed:
       self.events.add(EventName.resumeBlocked)
 
     if not self.CP.notCar:
@@ -632,7 +632,7 @@ class Controls:
         actuators.speed = long_plan.speeds[-1]
 
       # Steering PID loop and lateral MPC
-      self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature)
+      self.desired_curvature = clip_curvature(CS.vEgo, self.desired_curvature, model_v2.action.desiredCurvature, self.clip_curves)
       actuators.curvature = self.desired_curvature
       actuators.steer, actuators.steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
                                                                              self.steer_limited, self.desired_curvature,
@@ -722,12 +722,16 @@ class Controls:
     return CC, lac_log, FPCC
 
   def update_frogpilot_variables(self, CS):
-    self.always_on_lateral_active |= self.frogpilot_toggles.always_on_lateral_main or CS.cruiseState.enabled
-    self.always_on_lateral_active &= self.frogpilot_toggles.always_on_lateral_set and CS.cruiseState.available
+    main_enabled = (self.frogpilot_toggles.always_on_lateral_main or CS.cruiseState.enabled or (self.frogpilot_toggles.always_on_lateral_lkas and self.sm['frogpilotCarState'].alwaysOnLateralEnabled))
+    if not hasattr(self, 'always_on_lateral_active'):
+        self.always_on_lateral_active = False
+
+    self.always_on_lateral_active = main_enabled
     self.always_on_lateral_active &= CS.gearShifter not in NON_DRIVING_GEARS
     self.always_on_lateral_active &= self.sm['frogpilotPlan'].lateralCheck
     self.always_on_lateral_active &= self.sm['liveCalibration'].calPerc >= 1
-    self.always_on_lateral_active &= not (self.frogpilot_toggles.always_on_lateral_lkas and self.sm['frogpilotCarState'].alwaysOnLateralDisabled)
+    self.always_on_lateral_active &= ((self.frogpilot_toggles.always_on_lateral_lkas) and self.sm['frogpilotCarState'].alwaysOnLateralEnabled) or \
+                                     ((self.frogpilot_toggles.always_on_lateral_main) and CS.cruiseState.available)
     self.always_on_lateral_active &= not (CS.brakePressed and CS.vEgo < self.frogpilot_toggles.always_on_lateral_pause_speed) or CS.standstill
     self.always_on_lateral_active = bool(self.always_on_lateral_active)
 
@@ -744,14 +748,18 @@ class Controls:
           self.experimental_mode = not self.experimental_mode
           self.params.put_bool_nonblocking("ExperimentalMode", self.experimental_mode)
 
-    if self.sm.frame * DT_CTRL % DT_MDL == 0 or self.resume_pressed:
-      self.resume_previously_pressed = self.resume_pressed
+    if self.sm.updated['frogpilotPlan'] or any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents):
+      self.accel_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
+
+    if self.sm.updated['frogpilotPlan'] or any(be.type == ButtonType.decelCruise for be in CS.buttonEvents):
+      self.decel_pressed = any(be.type == ButtonType.decelCruise for be in CS.buttonEvents)
 
     FPCC = custom.FrogPilotCarControl.new_message()
     FPCC.alwaysOnLateralActive = self.always_on_lateral_active
+    FPCC.accelPressed = self.accel_pressed
+    FPCC.decelPressed = self.decel_pressed
     FPCC.fcwEventTriggered = self.fcw_event_triggered
     FPCC.noEntryEventTriggered = self.no_entry_alert_triggered
-    FPCC.resumePressed = self.resume_previously_pressed
     FPCC.steerSaturatedEventTriggered = self.steer_saturated_event_triggered
 
     return FPCC
@@ -783,6 +791,10 @@ class Controls:
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
     hudControl.leadDistanceBars = self.personality + 1
+
+    leadOne = self.sm['radarState'].leadOne
+    hudControl.leadDistance = leadOne.dRel if leadOne.status else 0
+    hudControl.leadRelSpeed = leadOne.vRel if leadOne.status else 0
 
     hudControl.rightLaneVisible = True
     hudControl.leftLaneVisible = True

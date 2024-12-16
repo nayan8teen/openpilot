@@ -14,9 +14,9 @@ UtilitiesPanel::UtilitiesPanel(FrogPilotSettingsWindow *parent) : FrogPilotListW
         system("python3 /data/openpilot/panda/board/recover.py");
 
         flashPandaBtn->setValue(tr("Flashed!"));
-        util::sleep_for(2000);
+        util::sleep_for(2500);
         flashPandaBtn->setValue(tr("Rebooting..."));
-        util::sleep_for(2000);
+        util::sleep_for(2500);
         Hardware::reboot();
       }).detach();
     }
@@ -51,9 +51,9 @@ UtilitiesPanel::UtilitiesPanel(FrogPilotSettingsWindow *parent) : FrogPilotListW
 
         resetTogglesBtn->setValue(tr("Reset!"));
 
-        util::sleep_for(2000);
+        util::sleep_for(2500);
         resetTogglesBtn->setValue(tr("Rebooting..."));
-        util::sleep_for(2000);
+        util::sleep_for(2500);
 
         Hardware::reboot();
       }).detach();

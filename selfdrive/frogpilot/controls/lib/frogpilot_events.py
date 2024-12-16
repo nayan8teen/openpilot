@@ -1,4 +1,3 @@
-import os
 import random
 
 from openpilot.common.conversions import Conversions as CV
@@ -77,7 +76,7 @@ class FrogPilotEvents:
     else:
       self.tracking_lead_distance = 0
 
-    if not self.openpilot_crashed_played and os.path.isfile(self.frogpilot_planner.error_log):
+    if not self.openpilot_crashed_played and self.frogpilot_planner.error_log.is_file():
       if frogpilot_toggles.random_events:
         self.events.add(EventName.openpilotCrashedRandomEvent)
       else:
@@ -178,7 +177,7 @@ class FrogPilotEvents:
           self.random_event_played = True
       self.always_on_lateral_active_previously = frogpilotCarControl.alwaysOnLateralActive
 
-    if frogpilot_toggles.speed_limit_changed_alert and self.frogpilot_planner.frogpilot_vcruise.speed_limit_changed:
+    if frogpilot_toggles.speed_limit_changed_alert and self.frogpilot_planner.frogpilot_vcruise.speed_limit_changed and self.frogpilot_planner.frogpilot_vcruise.speed_limit_timer < 1:
       self.events.add(EventName.speedLimitChanged)
 
     if 5 > self.frame > 4 and params.get("NNFFModelName", encoding='utf-8') is not None:

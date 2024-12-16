@@ -3,7 +3,6 @@ import datetime
 import os
 import signal
 import sys
-import threading
 import traceback
 
 from cereal import log
@@ -39,7 +38,6 @@ def manager_init() -> None:
   setup_frogpilot(build_metadata)
   params_storage = Params("/persist/params")
   convert_params(params_storage)
-  threading.Thread(target=frogpilot_boot_functions, args=(build_metadata, params_storage,)).start()
 
   default_params: list[tuple[str, str | bytes]] = [
     ("AlwaysOnDM", "0"),
@@ -85,7 +83,7 @@ def manager_init() -> None:
     else:
       params_storage.put(k, params.get(k))
   params.remove("DoToggleReset")
-  FrogPilotVariables().update(started=False)
+  frogpilot_boot_functions(build_metadata, params_storage)
 
   # Create folders needed for msgq
   try:

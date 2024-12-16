@@ -21,8 +21,6 @@ private:
   void showToggles(const std::set<QString> &keys);
   void updateState(const UIState &s);
 
-  std::set<QString> customThemeKeys = {"CustomColors", "CustomDistanceIcons", "CustomIcons", "CustomSignals", "CustomSounds", "DownloadStatusLabel", "WheelIcon"};
-
   FrogPilotButtonsControl *manageCustomColorsBtn;
   FrogPilotButtonsControl *manageCustomIconsBtn;
   FrogPilotButtonsControl *manageCustomSignalsBtn;
@@ -34,7 +32,17 @@ private:
 
   LabelControl *downloadStatusLabel;
 
+  QDir themePacksDirectory{"/data/themes/theme_packs/"};
+  QDir wheelsDirectory{"/data/themes/steering_wheels/"};
+
   QJsonObject frogpilotToggleLevels;
+
+  QString colorSchemeToDownload;
+  QString distanceIconPackToDownload;
+  QString iconPackToDownload;
+  QString signalAnimationToDownload;
+  QString soundPackToDownload;
+  QString wheelToDownload;
 
   Params params;
   Params params_memory{"/dev/shm/params"};
@@ -44,14 +52,13 @@ private:
   bool colorsDownloaded;
   bool distanceIconDownloading;
   bool distanceIconsDownloaded;
+  bool finalizingDownload;
   bool iconDownloading;
   bool iconsDownloaded;
-  bool personalizeOpenpilotOpen;
   bool signalDownloading;
   bool signalsDownloaded;
   bool soundDownloading;
   bool soundsDownloaded;
-  bool themeDeleting;
   bool themeDownloading;
   bool wheelDownloading;
   bool wheelsDownloaded;
@@ -59,4 +66,6 @@ private:
   int tuningLevel;
 
   std::map<QString, AbstractControl*> toggles;
+
+  std::set<QString> customThemeKeys = {"CustomColors", "CustomDistanceIcons", "CustomIcons", "CustomSignals", "CustomSounds", "DownloadStatusLabel", "WheelIcon"};
 };

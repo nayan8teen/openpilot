@@ -199,6 +199,7 @@ struct CarState {
   yawRate @22 :Float32;     # best estimate of yaw rate
   standstill @18 :Bool;
   wheelSpeeds @2 :WheelSpeeds;
+  vCruiseCluster @51 :Float32; # set speed to display in the UI
 
   # gas pedal, 0.0-1.0
   gas @3 :Float32;        # this is user pedal only
@@ -418,6 +419,8 @@ struct CarControl {
     rightLaneDepart @8: Bool;
     leftLaneDepart @9: Bool;
     leadDistanceBars @10: Int8;  # 1-3: 1 is closest, 3 is farthest. some ports may utilize 2-4 bars instead
+    leadDistance @11: Float32;
+    leadRelSpeed @12: Float32;
 
     enum VisualAlert {
       # these are the choices from the Honda

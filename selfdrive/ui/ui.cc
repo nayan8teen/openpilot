@@ -51,11 +51,11 @@ void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, con
   cereal::RadarState::LeadData::Reader (cereal::RadarState::Reader::*get_lead_data[7])() const = {
     &cereal::RadarState::Reader::getLeadOne,
     &cereal::RadarState::Reader::getLeadTwo,
+    &cereal::RadarState::Reader::getLeadFar,
     &cereal::RadarState::Reader::getLeadLeft,
     &cereal::RadarState::Reader::getLeadRight,
     &cereal::RadarState::Reader::getLeadLeftFar,
     &cereal::RadarState::Reader::getLeadRightFar,
-    &cereal::RadarState::Reader::getLeadsLead
   };
 
   for (int i = 0; i < 7; ++i) {
@@ -140,20 +140,16 @@ void update_model(UIState *s,
     auto lead_count = model.getLeadsV3().size();
     if (lead_count > 0) {
       auto lead_one = model.getLeadsV3()[0];
-      scene.has_lead = lead_one.getProb() > scene.lead_detection_probability;
 
-      if (scene.has_lead) {
+      if (lead_one.getProb() > scene.lead_detection_probability) {
         const float lead_d = lead_one.getX()[0] * 2.;
         max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
       }
-    } else {
-      scene.has_lead = false;
     }
   } else {
     auto lead_one = (*s->sm)["radarState"].getRadarState().getLeadOne();
-    scene.has_lead = lead_one.getModelProb() > scene.lead_detection_probability;
 
-    if (scene.has_lead) {
+    if (lead_one.getModelProb() > scene.lead_detection_probability) {
       const float lead_d = lead_one.getDRel() * 2.;
       max_distance = std::clamp((float)(lead_d - fmin(lead_d * 0.35, 10.)), 0.0f, max_distance);
     }
@@ -299,8 +295,6 @@ static void update_state(UIState *s) {
     scene.lane_width_left = frogpilotPlan.getLaneWidthLeft();
     scene.lane_width_right = frogpilotPlan.getLaneWidthRight();
     scene.mtsc_speed = frogpilotPlan.getMtscSpeed();
-    scene.obstacle_distance = frogpilotPlan.getSafeObstacleDistance();
-    scene.obstacle_distance_stock = frogpilotPlan.getSafeObstacleDistanceStock();
     scene.red_light = frogpilotPlan.getRedLight();
     scene.speed_jerk = frogpilotPlan.getSpeedJerk();
     scene.speed_jerk_difference = frogpilotPlan.getSpeedJerkStock() - scene.speed_jerk;
@@ -311,7 +305,6 @@ static void update_state(UIState *s) {
     scene.speed_limit_overridden = frogpilotPlan.getSlcOverridden();
     scene.speed_limit_overridden_speed = frogpilotPlan.getSlcOverriddenSpeed();
     scene.speed_limit_source = frogpilotPlan.getSlcSpeedLimitSource().cStr();
-    scene.stopped_equivalence = frogpilotPlan.getStoppedEquivalenceFactor();
     scene.unconfirmed_speed_limit = frogpilotPlan.getUnconfirmedSlcSpeedLimit();
     scene.upcoming_speed_limit = frogpilotPlan.getUpcomingSLCSpeedLimit();
     scene.vtsc_controlling_curve = frogpilotPlan.getVtscControllingCurve();
@@ -354,13 +347,11 @@ static void update_state(UIState *s) {
 }
 
 void ui_update_params(UIState *s) {
-  std::thread([=] {
-    auto params = Params();
-    s->scene.is_metric = params.getBool("IsMetric");
-    s->scene.map_on_left = params.getBool("NavSettingLeftSide");
+  auto params = Params();
+  s->scene.is_metric = params.getBool("IsMetric");
+  s->scene.map_on_left = params.getBool("NavSettingLeftSide");
 
-    ui_update_frogpilot_params(s);
-  }).detach();
+  ui_update_frogpilot_params(s);
 }
 
 void ui_update_frogpilot_params(UIState *s) {
@@ -370,15 +361,12 @@ void ui_update_frogpilot_params(UIState *s) {
   scene.adjacent_path = scene.frogpilot_toggles.value("adjacent_paths").toBool();
   scene.adjacent_path_metrics = scene.frogpilot_toggles.value("adjacent_path_metrics").toBool();
   scene.always_on_lateral = scene.frogpilot_toggles.value("always_on_lateral").toBool();
-  scene.aol_status_bar = scene.frogpilot_toggles.value("always_on_lateral_status_bar").toBool();
   scene.big_map = scene.frogpilot_toggles.value("big_map").toBool();
   scene.blind_spot_path = scene.frogpilot_toggles.value("blind_spot_path").toBool();
   scene.camera_view = scene.frogpilot_toggles.value("camera_view").toDouble();
-  scene.cem_status_bar = scene.frogpilot_toggles.value("conditional_status_bar").toBool();
+  scene.cem_status = scene.frogpilot_toggles.value("cem_status").toBool();
   scene.compass = scene.frogpilot_toggles.value("compass").toBool();
   scene.conditional_experimental = scene.frogpilot_toggles.value("conditional_experimental_mode").toBool();
-  scene.conditional_limit = scene.frogpilot_toggles.value("conditional_limit").toDouble();
-  scene.conditional_limit_lead = scene.frogpilot_toggles.value("conditional_limit_lead").toDouble();
   scene.cpu_metrics = scene.frogpilot_toggles.value("cpu_metrics").toBool();
   scene.driver_camera_in_reverse = scene.frogpilot_toggles.value("driver_camera_in_reverse").toBool();
   scene.dynamic_path_width = scene.frogpilot_toggles.value("dynamic_path_width").toBool();
@@ -397,7 +385,7 @@ void ui_update_frogpilot_params(UIState *s) {
   scene.hide_speed_limit = scene.frogpilot_toggles.value("hide_speed_limit").toBool();
   scene.ip_metrics = scene.frogpilot_toggles.value("ip_metrics").toBool();
   scene.jerk_metrics = scene.frogpilot_toggles.value("jerk_metrics").toBool();
-  scene.lateral_tuning_metrics = scene.has_auto_tune && scene.frogpilot_toggles.value("lateral_tuning_metrics").toBool();
+  scene.lateral_tuning_metrics = scene.frogpilot_toggles.value("lateral_tuning_metrics").toBool();
   scene.lane_detection_width = scene.frogpilot_toggles.value("lane_detection_width").toDouble();
   scene.lane_line_width = scene.frogpilot_toggles.value("lane_line_width").toDouble();
   scene.lead_detection_probability = scene.frogpilot_toggles.value("lead_detection_probability").toDouble();
@@ -460,6 +448,8 @@ void ui_update_frogpilot_params(UIState *s) {
   if (scene.tethering_config == 1) {
     s->wifi->setTetheringEnabled(true);
   }
+
+  emit s->togglesUpdated();
 }
 
 void ui_update_theme(UIState *s) {

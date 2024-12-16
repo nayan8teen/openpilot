@@ -18,7 +18,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
         deleteDrivingDataBtn->setValue(tr("Deleted!"));
 
-        util::sleep_for(2000);
+        util::sleep_for(2500);
 
         deleteDrivingDataBtn->setEnabled(true);
 
@@ -49,7 +49,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
             screenRecordingsBtn->setValue(tr("Deleted!"));
 
-            util::sleep_for(2000);
+            util::sleep_for(2500);
 
             screenRecordingsBtn->setEnabled(true);
 
@@ -76,7 +76,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
           screenRecordingsBtn->setValue(tr("Deleted!"));
 
-          util::sleep_for(2000);
+          util::sleep_for(2500);
 
           screenRecordingsBtn->setEnabled(true);
 
@@ -111,7 +111,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
             screenRecordingsBtn->setValue(tr("Renamed!"));
 
-            util::sleep_for(2000);
+            util::sleep_for(2500);
 
             screenRecordingsBtn->setEnabled(true);
 
@@ -166,7 +166,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
           frogpilotBackupBtn->setValue(tr("Backup created!"));
 
-          util::sleep_for(2000);
+          util::sleep_for(2500);
 
           frogpilotBackupBtn->setEnabled(true);
 
@@ -196,7 +196,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
               dirToDelete.removeRecursively();
             }
 
-            util::sleep_for(2000);
+            util::sleep_for(2500);
 
             frogpilotBackupBtn->setValue("");
 
@@ -225,7 +225,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
           frogpilotBackupBtn->setValue(tr("Deleted!"));
 
-          util::sleep_for(2000);
+          util::sleep_for(2500);
 
           frogpilotBackupBtn->setValue("");
 
@@ -277,11 +277,11 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
             frogpilotBackupBtn->setValue(tr("Restored!"));
 
-            util::sleep_for(2000);
+            util::sleep_for(2500);
 
             frogpilotBackupBtn->setValue(tr("Rebooting..."));
 
-            util::sleep_for(2000);
+            util::sleep_for(2500);
 
             Hardware::reboot();
           }).detach();
@@ -323,7 +323,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
           toggleBackupBtn->setValue(tr("Backup created!"));
 
-          util::sleep_for(2000);
+          util::sleep_for(2500);
 
           toggleBackupBtn->setEnabled(true);
 
@@ -349,7 +349,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
             QDir dirToDelete(backupDir.filePath(selection));
             dirToDelete.removeRecursively();
 
-            util::sleep_for(2000);
+            util::sleep_for(2500);
 
             toggleBackupBtn->setValue("");
 
@@ -378,7 +378,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
           toggleBackupBtn->setValue(tr("Deleted!"));
 
-          util::sleep_for(2000);
+          util::sleep_for(2500);
 
           toggleBackupBtn->setValue("");
 
@@ -414,7 +414,7 @@ FrogPilotDataPanel::FrogPilotDataPanel(FrogPilotSettingsWindow *parent) : FrogPi
 
             toggleBackupBtn->setValue(tr("Restored!"));
 
-            util::sleep_for(2000);
+            util::sleep_for(2500);
 
             toggleBackupBtn->setValue("");
 

@@ -1,6 +1,5 @@
 #include <filesystem>
 #include <iostream>
-
 #include "selfdrive/ui/qt/widgets/scrollview.h"
 
 #include "selfdrive/frogpilot/navigation/ui/maps_settings.h"
@@ -46,15 +45,15 @@ FrogPilotSettingsWindow::FrogPilotSettingsWindow(SettingsWindow *parent) : QFram
 
   std::vector<QString> togglePresets{tr("Minimal"), tr("Standard"), tr("Advanced"), tr("Developer")};
   ButtonParamControl *togglePreset = new ButtonParamControl("TuningLevel", tr("Tuning Level"),
-                                        tr("Select the tuning level that best suits your needs. 'Basic' is ideal for those who prefer simplicity and ease of use, "
+                                        tr("Select the tuning level that best suits your needs. 'Minimal' is ideal for those who prefer simplicity and ease of use, "
                                         "'Standard' is recommended for most users, offering a balanced experience, "
                                         "'Advanced' provides more control for experienced users, "
                                         "while 'Developer' unlocks highly customizable settings designed for seasoned enthusiasts."),
                                         "../frogpilot/assets/toggle_icons/icon_customization.png",
                                         togglePresets);
-  int timeTo100FPHours = 100 - (paramsTracking.getInt("FrogPilotMinutes") / 60);
-  int timeTo250OPHours = 250 - (params.getInt("openpilotMinutes") / 60);
-  togglePreset->setEnabledButtons(3, timeTo100FPHours <= 0 || timeTo250OPHours <= 0);
+  int timeTo1FPHours = 1 - (paramsTracking.getInt("FrogPilotMinutes") / 60);
+  int timeTo1OPHours = 1 - (params.getInt("openpilotMinutes") / 60);
+  togglePreset->setEnabledButtons(3, timeTo1FPHours <= 0 || timeTo1OPHours <= 0);
   QObject::connect(togglePreset, &ButtonParamControl::buttonClicked, [=](int id) {
     tuningLevel = id;
 
@@ -106,6 +105,7 @@ FrogPilotSettingsWindow::FrogPilotSettingsWindow(SettingsWindow *parent) : QFram
 
   FrogPilotVisualsPanel *frogpilotVisualsPanel = new FrogPilotVisualsPanel(this);
   QObject::connect(frogpilotVisualsPanel, &FrogPilotVisualsPanel::openParentToggle, this, &FrogPilotSettingsWindow::openParentToggle);
+  QObject::connect(frogpilotVisualsPanel, &FrogPilotVisualsPanel::openSubParentToggle, this, &FrogPilotSettingsWindow::openSubParentToggle);
 
   std::vector<std::pair<QString, std::vector<QWidget*>>> panels = {
     {tr("Alerts and Sounds"), {frogpilotSoundsPanel}},
@@ -189,11 +189,11 @@ void FrogPilotSettingsWindow::updateVariables() {
     cereal::CarParams::SafetyModel safetyModel = CP.getSafetyConfigs()[0].getSafetyModel();
 
     std::string carFingerprint = CP.getCarFingerprint();
-    std::string carModel = CP.getCarName();
+    std::string carMake = CP.getCarName();
 
-    hasAutoTune = (carModel == "hyundai" || carModel == "toyota") && CP.getLateralTuning().which() == cereal::CarParams::LateralTuning::TORQUE;
+    hasAutoTune = (carMake == "hyundai" || carMake == "toyota") && CP.getLateralTuning().which() == cereal::CarParams::LateralTuning::TORQUE;
     hasBSM = CP.getEnableBsm();
-    hasDashSpeedLimits = carModel == "hyundai" || carModel == "toyota";
+    hasDashSpeedLimits = carMake == "hyundai" || carMake == "toyota";
     hasExperimentalOpenpilotLongitudinal = CP.getExperimentalLongitudinalAvailable();
     hasNNFFLog = checkNNFFLogFileExists(carFingerprint);
     hasOpenpilotLongitudinal = hasLongitudinalControl(CP);
@@ -201,12 +201,13 @@ void FrogPilotSettingsWindow::updateVariables() {
     hasRadar = !CP.getRadarUnavailable();
     hasSNG = CP.getMinEnableSpeed() <= 0;
     isBolt = carFingerprint == "CHEVROLET_BOLT_CC" || carFingerprint == "CHEVROLET_BOLT_EUV";
-    isGM = carModel == "gm";
-    isHKGCanFd = carModel == "hyundai" && safetyModel == cereal::CarParams::SafetyModel::HYUNDAI_CANFD;
+    isGM = carMake == "gm";
+    isHKG = carMake == "hyundai";
+    isHKGCanFd = isHKG && safetyModel == cereal::CarParams::SafetyModel::HYUNDAI_CANFD;
     isImpreza = carFingerprint == "SUBARU_IMPREZA";
     isPIDCar = CP.getLateralTuning().which() == cereal::CarParams::LateralTuning::PID;
-    isSubaru = carModel == "subaru";
-    isToyota = carModel == "toyota";
+    isSubaru = carMake == "subaru";
+    isToyota = carMake == "toyota";
     isVolt = carFingerprint == "CHEVROLET_VOLT";
     forcingAutoTune = params.getBool("AdvancedLateralTune") && params.getBool("ForceAutoTune");
     steerFrictionStock = CP.getLateralTuning().getTorque().getFriction();
@@ -246,8 +247,6 @@ void FrogPilotSettingsWindow::updateVariables() {
       }
       params.putFloat("SteerRatioStock", steerRatioStock);
     }
-
-    uiState()->scene.has_auto_tune = hasAutoTune || forcingAutoTune;
 
     if (params.checkKey("LiveTorqueParameters")) {
       std::string torqueParams = params.get("LiveTorqueParameters");
