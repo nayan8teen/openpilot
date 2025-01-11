@@ -18,10 +18,12 @@ from openpilot.common.swaglog import cloudlog
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MIN = -1.2
-A_CRUISE_MAX_VALS = [2.0, 2.0, 2.0, 1.80, 1.20, .534, .435, .32,  .088]
-A_CRUISE_MAX_BP =   [0.,  1.,  7.,  8.,   11.,  20.,  25.,  30.,  55.]
-A_CRUISE_MIN_VALS = [-0.6,  -0.6]
-A_CRUISE_MIN_BP =   [0.,    20.]
+
+A_CRUISE_MAX_VALS =   [2.0, 2.0,  2.0,  1.04,  .65,  .57, .46,  .333,  .115]
+A_CRUISE_MAX_BP =     [0.,  6.1,  8.,   11.,  16.,  20.,  25.,  30.,  40.]
+A_CRUISE_MIN_VALS =    [-0.20, -0.20, -1.0,  -1.0,  -1.2,  -1.2]
+A_CRUISE_MIN_BP =      [0.,    1.5,   1.51,  20.,  20.01,  30.]
+
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 ALLOW_THROTTLE_THRESHOLD = 0.5
 MIN_ALLOW_THROTTLE_SPEED = 2.5
@@ -133,7 +135,8 @@ class LongitudinalPlanner:
     prev_accel_constraint = not (reset_state or sm['carState'].standstill)
 
     if self.mpc.mode == 'acc':
-      accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
+      #accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
+      accel_limits = [get_min_accel(v_ego), get_max_accel(v_ego)]
       steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
       accel_limits_turns = limit_accel_in_turns(v_ego, steer_angle_without_offset, accel_limits, self.CP)
     else:
