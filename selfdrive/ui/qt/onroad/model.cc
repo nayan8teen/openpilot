@@ -106,9 +106,13 @@ void ModelRenderer::drawLaneLines(QPainter &painter) {
 }
 
 void ModelRenderer::drawPath(QPainter &painter, const cereal::ModelDataV2::Reader &model, int height) {
-  QLinearGradient bg(0, height, 0, 0);
+
   auto *s = uiState();
   auto &sm = *(s->sm);
+  const auto long_plan_sp = sm["longitudinalPlanSP"].getLongitudinalPlanSP();
+  bool exp_mode_path = (long_plan_sp.getDynamicExperimentalControl() && long_plan_sp.getMpcSource() == cereal::MpcSource::BLENDED) ||
+                       (!long_plan_sp.getDynamicExperimentalControl() && sm["selfdriveState"].getSelfdriveState().getExperimentalMode());
+  QLinearGradient bg(0, height, 0, 0);
 
   float v_ego = sm["carState"].getCarState().getVEgo();
 
@@ -116,7 +120,7 @@ void ModelRenderer::drawPath(QPainter &painter, const cereal::ModelDataV2::Reade
   auto now = std::chrono::steady_clock::now().time_since_epoch();
   float time_offset = std::chrono::duration_cast<std::chrono::milliseconds>(now).count() / 1000.0f; // seconds
 
-  if (experimental_mode) {
+  if (exp_mode_path) {
     // The first half of track_vertices are the points for the right side of the path
     const auto &acceleration = model.getAcceleration().getX();
     const int max_len = std::min<int>(track_vertices.length() / 2, acceleration.size());
