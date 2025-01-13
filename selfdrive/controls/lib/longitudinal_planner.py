@@ -29,6 +29,11 @@ A_CRUISE_MAX_BP =     [0.,  1.,   6.,   8.,   11.,  20.,  25.,  30.,  55.]
 A_CRUISE_MIN_VALS =    [-0.22, -0.22,  -0.25, -1.0, -1.2]
 A_CRUISE_MIN_BP =      [0.,    5.,     11.,   20.,  30.]
 
+#A_CRUISE_MAX_VALS = [3.0, 1.7, 1.3, 0.7, 0.6, 0.44, 0.32, 0.22, 0.16, 0.0078]
+#A_CRUISE_MAX_BP =   [0.,  3,   6.,  8.,  11., 15.,  20.,  25.,  30.,  55.]
+#A_CRUISE_MIN_VALS = [-0.65,  -0.60,  -0.70, -0.70,  -0.65, -0.65]
+#A_CRUISE_MIN_BP =   [0.,     0.07,   10.,   20.,    30.,   55.]
+
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 ALLOW_THROTTLE_THRESHOLD = 0.5
 MIN_ALLOW_THROTTLE_SPEED = 2.5
