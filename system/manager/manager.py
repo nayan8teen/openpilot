@@ -54,6 +54,7 @@ def manager_init() -> None:
     ("ToyotaEnhancedBsm", "0"),
     ("ToyotaTSS2Long", "0"),
     ("DynamicExperimentalControl", "0"),
+    ("FastTakeOff", "0"),
   ]
 
   if params.get_bool("RecordFrontLock"):

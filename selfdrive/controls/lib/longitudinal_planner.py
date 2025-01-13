@@ -106,10 +106,13 @@ class LongitudinalPlanner:
     self.read_param()
 
     self.dynamic_experimental_controller = DynamicExperimentalController()
+    self.fast_take_off = False
+
 
   def read_param(self):
     try:
       self.dynamic_experimental_controller.set_enabled(self.params.get_bool("DynamicExperimentalControl"))
+      self.fast_take_off = self.params.get_bool("FastTakeOff")
     except AttributeError:
       self.dynamic_experimental_controller = DynamicExperimentalController()
 
@@ -202,7 +205,10 @@ class LongitudinalPlanner:
     self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
-    self.mpc.update(sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality)
+    print("Fast take off status:", self.fast_take_off)
+    self.mpc.update(sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality, fast_take_off=self.fast_take_off)
+
+
 
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
@@ -254,10 +260,10 @@ class LongitudinalPlanner:
 
     # DEC
     longitudinalPlanSP.mpcSource = MpcSource.blended if self.mpc.mode == 'blended' else MpcSource.acc
-    print(f"mpcSource: {longitudinalPlanSP.mpcSource}")
+    #print(f"mpcSource: {longitudinalPlanSP.mpcSource}")
 
     longitudinalPlanSP.dynamicExperimentalControl = self.dynamic_experimental_controller.is_enabled()
-    print(f"dynamicExperimentalControl: {longitudinalPlanSP.dynamicExperimentalControl}")
+    #print(f"dynamicExperimentalControl: {longitudinalPlanSP.dynamicExperimentalControl}")
 
 
     pm.send('longitudinalPlanSP', plan_sp_send)
