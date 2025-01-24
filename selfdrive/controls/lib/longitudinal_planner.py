@@ -20,14 +20,14 @@ from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import Lon
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MIN = -1.2
 
-A_CRUISE_MAX_VALS =   [2.0, 2.0,  2.0,  1.99,  1.05, .72,  .61,  .42,  .333,  .115]
+A_CRUISE_MAX_VALS =   [2.0, 2.0,  2.0,  1.98,  1.04, .73,  .61,  .42,  .333,  .115]
 A_CRUISE_MAX_BP =     [0.,  1.,   6.,   8.,   11.,  16.,   20.,  25.,  30.,  55.]
 #A_CRUISE_MAX_VALS =   [2.0, 2.0,  2.0,  1.99,  1.246, .762,  .626, .436,  .333,  .115]
 #A_CRUISE_MAX_BP =     [0.,  1.,   6.,   8.,   11.,  16.,   20.,  25.,  30.,  55.]
 #A_CRUISE_MIN_VALS =    [-1.2, -1.2]
 #A_CRUISE_MIN_BP =      [0.,   40.]
-A_CRUISE_MIN_VALS =    [-0.02, -0.02, -0.18, -0.18,  -0.40, -0.40,  -0.76, -0.76, -1.0, -1.0]
-A_CRUISE_MIN_BP =      [0.,    5.,  5.01,   10.,    10.01,  15.,  15.01, 20.,  20.01, 40.]
+A_CRUISE_MIN_VALS =    [-0.015, -0.015, -0.17, -0.17,  -0.40, -0.40, -0.76, -0.76, -1.0, -1.0]
+A_CRUISE_MIN_BP =      [0.,     5.,     5.01,  10.,    10.01, 15.,   15.01, 20.,   20.01, 40.]
 
 
 
