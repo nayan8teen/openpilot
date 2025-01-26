@@ -30,7 +30,7 @@ jobs:
         git checkout master-dev-c3-new
         git merge -X theirs upstream/master-dev-c3-new
         sed -i 's/MAX_TIME_OFFROAD_S =.*/MAX_TIME_OFFROAD_S = 300/g' system/hardware/power_monitoring.py
-        sed -i 's/VBATT_PAUSE_CHARGING =.*/MVBATT_PAUSE_CHARGING = 12.0/g' system/hardware/power_monitoring.py
+        sed -i 's/VBATT_PAUSE_CHARGING =.*/VBATT_PAUSE_CHARGING = 12.0/g' system/hardware/power_monitoring.py
         sed -i 's/MIN_ON_TIME_S =.*/MIN_ON_TIME_S = 300/g' system/hardware/power_monitoring.py
         git commit -am "Sync & Update Offroad Time"
         git push --no-verify origin master-dev-c3-new
