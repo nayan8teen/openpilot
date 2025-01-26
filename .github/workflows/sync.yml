@@ -23,7 +23,7 @@ jobs:
     - name: Merge & Modify
       run: |
         git remote add upstream https://github.com/sunnypilot/sunnypilot.git
-        git remote set-url origin https://${{ secrets.GITHUB_TOKEN }}@github.com/nayan8teen/openpilot.git
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/nayan8teen/openpilot.git
         git fetch upstream
         git config user.name 'github-actions[bot]'
         git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
