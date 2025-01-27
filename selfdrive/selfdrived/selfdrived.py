@@ -99,7 +99,7 @@ class SelfdriveD(CruiseHelper):
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
 
-    car_recognized = self.CP.carName != 'mock'
+    car_recognized = self.CP.brand != 'mock'
 
     # cleanup old params
     if not self.CP.experimentalLongitudinalAvailable:
@@ -379,6 +379,10 @@ class SelfdriveD(CruiseHelper):
 
       if self.sm['modelV2'].frameDropPerc > 20:
         self.events.add(EventName.modeldLagging)
+
+    # mute canBusMissing event if in Park, as it sometimes may trigger a false alarm with MADS in Paused state
+    if CS.gearShifter == car.CarState.GearShifter.park and self.mads.enabled:
+      self.events.remove(EventName.canBusMissing)
 
     CruiseHelper.update(self, CS, self.events_sp, self.experimental_mode)
 

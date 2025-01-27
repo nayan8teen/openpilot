@@ -139,6 +139,26 @@
         <source>Enable this to attempt to enable radar tracks for Hyundai, Kia, and Genesis models equipped with the supported Mando SCC radar. This allows sunnypilot to use radar data for improved lead tracking and overall longitudinal performance.</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Enable ADB</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ADB (Android Debug Bridge) allows connecting to your device over USB or over the network. See https://docs.comma.ai/how-to/connect-to-comma for more info.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>openpilot Longitudinal Control (Alpha)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>WARNING: openpilot longitudinal control is in alpha for this car and will disable Automatic Emergency Braking (AEB).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>On this car, openpilot defaults to the car&apos;s built-in ACC instead of openpilot&apos;s longitudinal control. Enable this to switch to openpilot longitudinal control. Enabling Experimental mode is recommended when enabling openpilot longitudinal control alpha.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>DevicePanel</name>
@@ -506,10 +526,6 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
 <context>
     <name>NetworkingSP</name>
     <message>
-        <source>Advanced</source>
-        <translation type="obsolete">Erweitert</translation>
-    </message>
-    <message>
         <source>Scan</source>
         <translation type="unfinished"></translation>
     </message>
@@ -651,6 +667,61 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
     <message>
         <source>Enable</source>
         <translation>Aktivieren</translation>
+    </message>
+</context>
+<context>
+    <name>PlatformSelector</name>
+    <message>
+        <source>Vehicle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SEARCH</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Search your vehicle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SEARCHING</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No vehicles found for query: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Select a vehicle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter model year (e.g., 2021) and model name (Toyota Corolla):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Vehicle Selector</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This setting will take effect once the device enters offroad state.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This setting will take effect immediately.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ok</source>
+        <translation type="obsolete">Ok</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation type="unfinished">Bestätigen</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">Abbrechen</translation>
     </message>
 </context>
 <context>
@@ -1411,14 +1482,6 @@ This may take up to a minute.</source>
         <translation>Der experimentelle Modus ist momentan für dieses Auto nicht verfügbar da es den eingebauten adaptiven Tempomaten des Autos benutzt.</translation>
     </message>
     <message>
-        <source>openpilot Longitudinal Control (Alpha)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>WARNING: openpilot longitudinal control is in alpha for this car and will disable Automatic Emergency Braking (AEB).</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Aggressive</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1432,10 +1495,6 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>Driving Personality</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>On this car, openpilot defaults to the car&apos;s built-in ACC instead of openpilot&apos;s longitudinal control. Enable this to switch to openpilot longitudinal control. Enabling Experimental mode is recommended when enabling openpilot longitudinal control alpha.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

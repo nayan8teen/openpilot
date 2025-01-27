@@ -139,6 +139,26 @@
         <source>Enable this to attempt to enable radar tracks for Hyundai, Kia, and Genesis models equipped with the supported Mando SCC radar. This allows sunnypilot to use radar data for improved lead tracking and overall longitudinal performance.</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Enable ADB</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ADB (Android Debug Bridge) allows connecting to your device over USB or over the network. See https://docs.comma.ai/how-to/connect-to-comma for more info.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>openpilot Longitudinal Control (Alpha)</source>
+        <translation type="unfinished">openpilot 가감속 제어 (알파)</translation>
+    </message>
+    <message>
+        <source>WARNING: openpilot longitudinal control is in alpha for this car and will disable Automatic Emergency Braking (AEB).</source>
+        <translation type="unfinished">경고: openpilot 가감속 제어 알파 기능으로 차량의 자동긴급제동(AEB)을 비활성화합니다.</translation>
+    </message>
+    <message>
+        <source>On this car, openpilot defaults to the car&apos;s built-in ACC instead of openpilot&apos;s longitudinal control. Enable this to switch to openpilot longitudinal control. Enabling Experimental mode is recommended when enabling openpilot longitudinal control alpha.</source>
+        <translation type="unfinished">이 차량은 openpilot 가감속 제어 대신 기본적으로 차량의 ACC로 가감속을 제어합니다. openpilot의 가감속 제어로 전환하려면 이 기능을 활성화하세요. openpilot 가감속 제어 알파를 활성화하는 경우 실험 모드 활성화를 권장합니다.</translation>
+    </message>
 </context>
 <context>
     <name>DevicePanel</name>
@@ -505,10 +525,6 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
 <context>
     <name>NetworkingSP</name>
     <message>
-        <source>Advanced</source>
-        <translation type="obsolete">고급 설정</translation>
-    </message>
-    <message>
         <source>Scan</source>
         <translation type="unfinished"></translation>
     </message>
@@ -651,6 +667,61 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
     <message>
         <source>Enable</source>
         <translation>활성화</translation>
+    </message>
+</context>
+<context>
+    <name>PlatformSelector</name>
+    <message>
+        <source>Vehicle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SEARCH</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Search your vehicle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SEARCHING</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No vehicles found for query: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Select a vehicle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter model year (e.g., 2021) and model name (Toyota Corolla):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Vehicle Selector</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This setting will take effect once the device enters offroad state.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This setting will take effect immediately.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ok</source>
+        <translation type="obsolete">확인</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation type="unfinished">확인</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">취소</translation>
     </message>
 </context>
 <context>
@@ -1409,18 +1480,6 @@ This may take up to a minute.</source>
     <message>
         <source>openpilot longitudinal control may come in a future update.</source>
         <translation>openpilot 가감속 제어는 향후 업데이트에서 지원될 수 있습니다.</translation>
-    </message>
-    <message>
-        <source>openpilot Longitudinal Control (Alpha)</source>
-        <translation>openpilot 가감속 제어 (알파)</translation>
-    </message>
-    <message>
-        <source>WARNING: openpilot longitudinal control is in alpha for this car and will disable Automatic Emergency Braking (AEB).</source>
-        <translation>경고: openpilot 가감속 제어 알파 기능으로 차량의 자동긴급제동(AEB)을 비활성화합니다.</translation>
-    </message>
-    <message>
-        <source>On this car, openpilot defaults to the car&apos;s built-in ACC instead of openpilot&apos;s longitudinal control. Enable this to switch to openpilot longitudinal control. Enabling Experimental mode is recommended when enabling openpilot longitudinal control alpha.</source>
-        <translation>이 차량은 openpilot 가감속 제어 대신 기본적으로 차량의 ACC로 가감속을 제어합니다. openpilot의 가감속 제어로 전환하려면 이 기능을 활성화하세요. openpilot 가감속 제어 알파를 활성화하는 경우 실험 모드 활성화를 권장합니다.</translation>
     </message>
     <message>
         <source>Aggressive</source>

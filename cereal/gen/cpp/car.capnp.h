@@ -2353,8 +2353,8 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline bool hasCarName() const;
-  inline  ::capnp::Text::Reader getCarName() const;
+  inline bool hasBrand() const;
+  inline  ::capnp::Text::Reader getBrand() const;
 
   inline bool hasCarFingerprint() const;
   inline  ::capnp::Text::Reader getCarFingerprint() const;
@@ -2542,12 +2542,12 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline bool hasCarName();
-  inline  ::capnp::Text::Builder getCarName();
-  inline void setCarName( ::capnp::Text::Reader value);
-  inline  ::capnp::Text::Builder initCarName(unsigned int size);
-  inline void adoptCarName(::capnp::Orphan< ::capnp::Text>&& value);
-  inline ::capnp::Orphan< ::capnp::Text> disownCarName();
+  inline bool hasBrand();
+  inline  ::capnp::Text::Builder getBrand();
+  inline void setBrand( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initBrand(unsigned int size);
+  inline void adoptBrand(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownBrand();
 
   inline bool hasCarFingerprint();
   inline  ::capnp::Text::Builder getCarFingerprint();
@@ -6243,36 +6243,36 @@ inline ::capnp::Orphan< ::cereal::CarControl::Actuators> CarOutput::Builder::dis
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool CarParams::Reader::hasCarName() const {
+inline bool CarParams::Reader::hasBrand() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool CarParams::Builder::hasCarName() {
+inline bool CarParams::Builder::hasBrand() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::Text::Reader CarParams::Reader::getCarName() const {
+inline  ::capnp::Text::Reader CarParams::Reader::getBrand() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::Text::Builder CarParams::Builder::getCarName() {
+inline  ::capnp::Text::Builder CarParams::Builder::getBrand() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void CarParams::Builder::setCarName( ::capnp::Text::Reader value) {
+inline void CarParams::Builder::setBrand( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::Text::Builder CarParams::Builder::initCarName(unsigned int size) {
+inline  ::capnp::Text::Builder CarParams::Builder::initBrand(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
-inline void CarParams::Builder::adoptCarName(
+inline void CarParams::Builder::adoptBrand(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::Text> CarParams::Builder::disownCarName() {
+inline ::capnp::Orphan< ::capnp::Text> CarParams::Builder::disownBrand() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }

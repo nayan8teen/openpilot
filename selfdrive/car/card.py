@@ -104,7 +104,9 @@ class Car:
         with car.CarParams.from_bytes(cached_params_raw) as _cached_params:
           cached_params = _cached_params
 
-      self.CI = get_car(*self.can_callbacks, obd_callback(self.params), experimental_long_allowed, num_pandas, cached_params)
+      fixed_fingerprint = self.params.get("CarPlatform", encoding='utf-8')
+
+      self.CI = get_car(*self.can_callbacks, obd_callback(self.params), experimental_long_allowed, num_pandas, cached_params, fixed_fingerprint)
       interfaces.setup_car_interface_sp(self.CI.CP, self.CI.CP_SP, self.params)
       self.RI = get_radar_interface(self.CI.CP, self.CI.CP_SP)
       self.CP = self.CI.CP
@@ -199,7 +201,7 @@ class Car:
 
     # Update carState from CAN
     CS = self.CI.update(can_list)
-    if self.CP.carName == 'mock':
+    if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
 
     # Update radar tracks from CAN
