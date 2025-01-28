@@ -1,7 +1,7 @@
 name: Sync Fork and Patch
 on:
   schedule:
-    - cron:  '0 0 * * *'
+    - cron:  '0 7 * * *'
   workflow_dispatch:  # click the button on Github repo!
 
 permissions:
