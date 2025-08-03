@@ -677,6 +677,86 @@
                 }
               ]
             }
+          ],
+          "sub_panels": [
+            {
+              "id": "dec_settings",
+              "label": "Dynamic Experimental Settings",
+              "trigger_key": "DynamicExperimentalControl",
+              "trigger_condition": {
+                "type": "param",
+                "key": "DynamicExperimentalControl",
+                "equals": true
+              },
+              "items": [
+                {
+                  "key": "DynamicExperimentalStandstill",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalStandstill"
+                },
+                {
+                  "key": "DynamicExperimentalModelSlowDown",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalModelSlowDown"
+                },
+                {
+                  "key": "DynamicExperimentalFCW",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalFCW"
+                },
+                {
+                  "key": "DynamicExperimentalHasLead",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalHasLead"
+                },
+                {
+                  "key": "DynamicExperimentalDistanceBased",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalDistanceBased"
+                },
+                {
+                  "key": "DynamicExperimentalDistanceValue",
+                  "widget": "option",
+                  "title": "DynamicExperimentalDistanceValue",
+                  "min": 0.0,
+                  "max": 25.0,
+                  "step": 1.0
+                },
+                {
+                  "key": "DynamicExperimentalSpeedBased",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalSpeedBased"
+                },
+                {
+                  "key": "DynamicExperimentalSpeedValue",
+                  "widget": "option",
+                  "title": "DynamicExperimentalSpeedValue",
+                  "min": 0.0,
+                  "max": 25.0,
+                  "step": 1.0
+                },
+                {
+                  "key": "DynamicExperimentalSlowness",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalSlowness"
+                },
+                {
+                  "key": "DynamicExperimentalFollowLead",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalFollowLead"
+                },
+                {
+                  "key": "DynamicExperimentalSlowerLead",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalSlowerLead"
+                },
+                {
+                  "key": "DynamicExperimentalStoppedLead",
+                  "widget": "toggle",
+                  "title": "DynamicExperimentalStoppedLead"
+                }
+              ]
+            }
           ]
         },
         {
