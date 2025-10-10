@@ -55,4 +55,6 @@ protected:
   QPointF lead_vertices[2] = {};
   Eigen::Matrix3f car_space_transform = Eigen::Matrix3f::Zero();
   QRectF clip_region;
+
+  void drawRadarPoint(QPainter &painter, const QPointF &pos, float v_rel, float radius = 10.0f);
 };
