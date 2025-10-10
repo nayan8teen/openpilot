@@ -95,6 +95,8 @@ void ui_update_params_sp(UIStateSP *s) {
   s->scene.visual_style_overhead = QString::fromStdString(params.get("VisualStyleOverhead")).toInt();
   s->scene.visual_style_overhead_zoom = QString::fromStdString(params.get("VisualStyleOverheadZoom")).toInt();
   s->scene.visual_style_overhead_threshold = QString::fromStdString(params.get("VisualStyleOverheadThreshold")).toInt();
+
+  s->scene.quiet_visual_mode = params.getBool("QuietVisualMode");
 }
 
 void UIStateSP::reset_onroad_sleep_timer(OnroadTimerStatusToggle toggleTimerStatus) {
