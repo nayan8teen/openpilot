@@ -24,6 +24,7 @@ ALL_SOURCES = tuple(SpeedLimitSource.schema.enumerants.values())
 class SpeedLimitResolver:
   limit_solutions: dict[custom.LongitudinalPlanSP.SpeedLimit.Source, float]
   distance_solutions: dict[custom.LongitudinalPlanSP.SpeedLimit.Source, float]
+  school_zone_solutions: dict[custom.LongitudinalPlanSP.SpeedLimit.Source, bool]
   v_ego: float
   speed_limit: float
   speed_limit_last: float
@@ -40,6 +41,7 @@ class SpeedLimitResolver:
     self._gps_location_service = get_gps_location_service(self.params)
     self.limit_solutions = {}  # Store for speed limit solutions from different sources
     self.distance_solutions = {}  # Store for distance to current speed limit start for different sources
+    self.school_zone_solutions = {} # Store for school zone solutions from different sources
 
     self.policy = self.params.get("SpeedLimitPolicy", return_default=True)
     self.policy = get_sanitize_int_param(
@@ -73,6 +75,7 @@ class SpeedLimitResolver:
     self.speed_limit_final = 0.
     self.speed_limit_final_last = 0.
     self.speed_limit_offset = 0.
+    self.school_zone = False
 
   def update_speed_limit_states(self) -> None:
     self.speed_limit_final = self.speed_limit + self.speed_limit_offset
@@ -109,11 +112,13 @@ class SpeedLimitResolver:
   def _reset_limit_sources(self, source: custom.LongitudinalPlanSP.SpeedLimit.Source) -> None:
     self.limit_solutions[source] = 0.
     self.distance_solutions[source] = 0.
+    self.school_zone_solutions[source] = False
 
   def _get_from_car_state(self, sm: messaging.SubMaster) -> None:
     self._reset_limit_sources(SpeedLimitSource.car)
     self.limit_solutions[SpeedLimitSource.car] = sm['carStateSP'].speedLimit
     self.distance_solutions[SpeedLimitSource.car] = 0.
+    self.school_zone_solutions[SpeedLimitSource.car] = sm['carStateSP'].schoolZone
 
   def _get_from_map_data(self, sm: messaging.SubMaster) -> None:
     self._reset_limit_sources(SpeedLimitSource.map)
@@ -141,6 +146,7 @@ class SpeedLimitResolver:
 
     self.limit_solutions[SpeedLimitSource.map] = speed_limit
     self.distance_solutions[SpeedLimitSource.map] = 0.
+    self.school_zone_solutions[SpeedLimitSource.map] = False
 
     # FIXME-SP: this is not working as expected
     if 0. < next_speed_limit < self.v_ego:
@@ -167,7 +173,7 @@ class SpeedLimitResolver:
 
     return SpeedLimitSource.none
 
-  def _resolve_limit_sources(self, sm: messaging.SubMaster) -> tuple[float, float, custom.LongitudinalPlanSP.SpeedLimit.Source]:
+  def _resolve_limit_sources(self, sm: messaging.SubMaster) -> tuple[float, float, custom.LongitudinalPlanSP.SpeedLimit.Source, bool]:
     """Get limit solutions from each data source"""
     self._get_from_car_state(sm)
     self._get_from_map_data(sm)
@@ -175,14 +181,15 @@ class SpeedLimitResolver:
     source = self._get_source_solution_according_to_policy()
     speed_limit = self.limit_solutions[source] if source else 0.
     distance = self.distance_solutions[source] if source else 0.
+    school_zone = self.school_zone_solutions[source] if source else False
 
-    return speed_limit, distance, source
+    return speed_limit, distance, source, school_zone
 
   def update(self, v_ego: float, sm: messaging.SubMaster) -> None:
     self.v_ego = v_ego
     self.update_params()
 
-    self.speed_limit, self.distance, self.source = self._resolve_limit_sources(sm)
+    self.speed_limit, self.distance, self.source, self.school_zone = self._resolve_limit_sources(sm)
     self.speed_limit_offset = self._get_speed_limit_offset()
 
     self.update_speed_limit_states()

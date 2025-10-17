@@ -67,6 +67,7 @@ void HudRendererSP::updateState(const UIState &s) {
     smartCruiseControlVisionActive = lp_sp.getSmartCruiseControl().getVision().getActive();
     smartCruiseControlMapEnabled = lp_sp.getSmartCruiseControl().getMap().getEnabled();
     smartCruiseControlMapActive = lp_sp.getSmartCruiseControl().getMap().getActive();
+    schoolZone = lp_sp.getSpeedLimit().getResolver().getSchoolZone();
   }
   greenLightAlert = lp_sp.getE2eAlerts().getGreenLightAlert();
   leadDepartAlert = lp_sp.getE2eAlerts().getLeadDepartAlert();
@@ -530,29 +531,60 @@ void HudRendererSP::drawSpeedLimitSigns(QPainter &p, QRect &sign_rect) {
     p.drawRoundedRect(sign_rect, 32, 32);
 
     // Inner border with violation color coding
-    QRect inner_rect = sign_rect.adjusted(10, 10, -10, -10);
+    QRect inner_rect = sign_rect.adjusted(8, 8, -8, -8);
     QColor border_color = QColor(0, 0, 0, alpha);
+    int school_rect_height = 40;
 
     p.setPen(QPen(border_color, 4));
     p.setBrush(QColor(255, 255, 255, alpha));
     p.drawRoundedRect(inner_rect, 22, 22);
 
+    if (schoolZone) {
+      QRect school_rect = QRect(inner_rect.left(), inner_rect.top(), inner_rect.width(), school_rect_height);
+      p.setPen(QPen(border_color, 4));
+      p.setBrush(QColor(251,253,24, alpha));
+
+      int radius = 40;
+      QPainterPath path;
+      path.moveTo(QPoint(inner_rect.left(), inner_rect.top() + school_rect_height));
+      path.lineTo(QPoint(inner_rect.right(), inner_rect.top() + school_rect_height));
+      path.arcTo(inner_rect.right() - radius, inner_rect.top(), radius, radius, 0, 90);
+      path.lineTo(inner_rect.left() + radius, inner_rect.top());
+      path.arcTo(inner_rect.left(), inner_rect.top(), radius, radius, 90, 90);
+      path.closeSubpath();
+      p.drawPath(path);
+
+      p.setFont(InterFont(30, QFont::DemiBold));
+      p.setPen(QColor(0, 0, 0, 255));
+      p.drawText(school_rect, Qt::AlignVCenter | Qt::AlignHCenter, tr("SCHOOL"));
+    }
+
     // "SPEED LIMIT" text
-    p.setFont(InterFont(40, QFont::DemiBold));
     p.setPen(QColor(0, 0, 0, alpha));
-    p.drawText(inner_rect.adjusted(0, 10, 0, 0), Qt::AlignTop | Qt::AlignHCenter, tr("SPEED"));
-    p.drawText(inner_rect.adjusted(0, 50, 0, 0), Qt::AlignTop | Qt::AlignHCenter, tr("LIMIT"));
+    if (schoolZone) {
+      p.setFont(InterFont(30, QFont::DemiBold));
+      p.drawText(inner_rect.adjusted(0, school_rect_height, 0, 0), Qt::AlignTop | Qt::AlignHCenter, tr("SPEED"));
+      p.drawText(inner_rect.adjusted(0, school_rect_height + 30, 0, 0), Qt::AlignTop | Qt::AlignHCenter, tr("LIMIT"));
+    } else {
+      p.setFont(InterFont(40, QFont::DemiBold));
+      p.drawText(inner_rect.adjusted(0, 10, 0, 0), Qt::AlignTop | Qt::AlignHCenter, tr("SPEED"));
+      p.drawText(inner_rect.adjusted(0, 50, 0, 0), Qt::AlignTop | Qt::AlignHCenter, tr("LIMIT"));
+    }
 
     // Speed value with color coding
     p.setFont(InterFont(90, QFont::Bold));
 
     p.setPen(speed_color);
-    p.drawText(inner_rect.adjusted(0, 80, 0, 0), Qt::AlignTop | Qt::AlignHCenter, speedLimitStr);
+    if (schoolZone) {
+      p.drawText(inner_rect.adjusted(0, school_rect_height + 45, 0, 0), Qt::AlignTop | Qt::AlignHCenter, speedLimitStr);
+    } else {
+      p.drawText(inner_rect.adjusted(0, 80, 0, 0), Qt::AlignTop | Qt::AlignHCenter, speedLimitStr);
+    }
 
     // Offset value in small box
     if (!speedLimitSubText.isEmpty() && hasSpeedLimit) {
       int offset_box_size = sign_rect.width() * 0.4;
-      int overlap = offset_box_size * 0.25;
+      int overlap = offset_box_size * 0.3;
       QRect offset_box_rect(
         sign_rect.right() - offset_box_size/1.5 + overlap,
         sign_rect.top() - offset_box_size/1.25 + overlap,

@@ -257,6 +257,7 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
       speedLimitFinalLast @6 :Float32;
       speedLimitValid @7 :Bool;
       speedLimitLastValid @8 :Bool;
+      schoolZone @9 :Bool;
     }
 
     struct Assist {
@@ -433,6 +434,7 @@ struct BackupManagerSP @0xf98d843bfd7004a3 {
 
 struct CarStateSP @0xb86e6369214c01c8 {
   speedLimit @0 :Float32;
+  schoolZone @1 :Bool;
 }
 
 struct LiveMapDataSP @0xf416ec09499d9d19 {
