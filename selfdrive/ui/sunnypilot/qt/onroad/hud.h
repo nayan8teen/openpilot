@@ -89,7 +89,6 @@ private:
   float speedLimitAheadDistance;
   float speedLimitAheadDistancePrev;
   int speedLimitAheadValidFrame;
-  bool schoolZone;
   SpeedLimitMode speedLimitMode = SpeedLimitMode::OFF;
   bool roadName;
   QString roadNameStr;

@@ -17,8 +17,3 @@ CONFIRM_SPEED_THRESHOLD = {
   True: 80,   # km/h
   False: 50,  # mph
 }
-
-CONFIRM_SPEED_DELTA = {
-  True: 25,   #kph
-  False: 15,  #mph
-}

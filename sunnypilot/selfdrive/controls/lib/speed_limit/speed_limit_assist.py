@@ -14,7 +14,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.sunnypilot import PARAMS_UPDATE_PERIOD
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
-from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit import PCM_LONG_REQUIRED_MAX_SET_SPEED, CONFIRM_SPEED_THRESHOLD, CONFIRM_SPEED_DELTA
+from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit import PCM_LONG_REQUIRED_MAX_SET_SPEED, CONFIRM_SPEED_THRESHOLD
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.helpers import compare_cluster_target, set_speed_limit_assist_availability
 
@@ -83,7 +83,6 @@ class SpeedLimitAssist:
     self.speed_limit_prev = 0.
     self.speed_limit_final_last_conv = 0
     self.prev_speed_limit_final_last_conv = 0
-    self._school_zone = False
     self._distance = 0.
     self.state = SpeedLimitAssistState.disabled
     self._state_prev = SpeedLimitAssistState.disabled
@@ -193,20 +192,13 @@ class SpeedLimitAssist:
   @property
   def apply_confirm_speed_threshold(self) -> bool:
     # below CST: always require user confirmation
-    # if self.v_cruise_cluster_below_confirm_speed_threshold:
-    #   return True
+    if self.v_cruise_cluster_below_confirm_speed_threshold:
+      return True
 
     # at/above CST:
     # - new speed limit >= CST: auto change
     # - new speed limit < CST: user confirmation required
-    # return bool(self.speed_limit_final_last_conv < CONFIRM_SPEED_THRESHOLD[self.is_metric])
-
-    # difference between new & last speed limit:
-    # school zone: require confirmation
-    # difference >= threshold: require confirmation
-    # difference < threshold: auto change
-    new_limit_delta_check = abs(self.speed_limit_final_last_conv - self.prev_speed_limit_final_last_conv) >= CONFIRM_SPEED_DELTA[self.is_metric]
-    return bool(new_limit_delta_check or self._school_zone)
+    return bool(self.speed_limit_final_last_conv < CONFIRM_SPEED_THRESHOLD[self.is_metric])
 
   def get_current_acceleration_as_target(self) -> float:
     return self.a_ego
@@ -387,7 +379,7 @@ class SpeedLimitAssist:
           self.update_active_event(events_sp)
 
   def update(self, long_enabled: bool, long_override: bool, v_ego: float, a_ego: float, v_cruise_cluster: float, speed_limit: float,
-             speed_limit_final_last: float, has_speed_limit: bool, distance: float, events_sp: EventsSP, school_zone: bool = False) -> None:
+             speed_limit_final_last: float, has_speed_limit: bool, distance: float, events_sp: EventsSP) -> None:
     self.long_enabled = long_enabled
     self.v_ego = v_ego
     self.a_ego = a_ego
@@ -396,7 +388,6 @@ class SpeedLimitAssist:
     self._speed_limit = speed_limit
     self._speed_limit_final_last = speed_limit_final_last
     self._distance = distance
-    self._school_zone = school_zone
 
     self.update_params()
     self.update_calculations(v_cruise_cluster)
