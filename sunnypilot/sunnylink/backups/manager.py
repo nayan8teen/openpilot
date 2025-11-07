@@ -7,6 +7,7 @@ See the LICENSE.md file in the root directory for more details.
 
 import base64
 import json
+import os
 import time
 from enum import Enum
 from typing import Any
@@ -16,6 +17,7 @@ from openpilot.common.params import Params, ParamKeyFlag
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.version import get_version
+from openpilot.system.hardware.hw import Paths
 
 from cereal import messaging, custom
 from sunnypilot.sunnylink.api import SunnylinkApi
@@ -36,6 +38,7 @@ class BackupManagerSP:
     self.device_id = self.params.get("SunnylinkDongleId")
     self.api = SunnylinkApi(self.device_id)
     self.pm = messaging.PubMaster(["backupManagerSP"])
+    self.sm = messaging.SubMaster(['carParams'])
 
     # Status tracking
     self.backup_status = custom.BackupManagerSP.Status.idle
@@ -186,6 +189,107 @@ class BackupManagerSP:
       self._report_status()
       return False
 
+  async def create_local_backup(self, identifier: str | None = None) -> bool:
+    """Creates and uploads a new backup to sunnylink."""
+    try:
+      self.backup_status = custom.BackupManagerSP.Status.inProgress
+      self._update_progress(0.0, OperationType.BACKUP)
+      
+      if identifier is None:
+        identifier = self.sm['carParams'].carFingerprint
+        if identifier is None:
+          raise Exception("Could not determine car fingerprint")
+
+      print(f"Creating local backup for {identifier}")
+
+      # Collect configuration data
+      config_data = self._collect_config_data()
+      self._update_progress(30.0, OperationType.BACKUP)
+  
+      # Serialize and encrypt config data
+      config_json = json.dumps(config_data)
+      self._update_progress(60.0, OperationType.BACKUP)
+  
+      backup_info = custom.BackupManagerSP.BackupInfo()
+      backup_info.config = config_json
+      backup_info.isEncrypted = False
+      backup_info.sunnypilotVersion = self._get_current_version()
+      backup_info.backupMetadata = [
+        custom.BackupManagerSP.MetadataEntry(key="creator", value="BackupManagerSP"),
+        custom.BackupManagerSP.MetadataEntry(key="identifier", value=identifier)
+      ]
+  
+      payload = json.loads(json.dumps(backup_info.to_dict(), cls=SnakeCaseEncoder))
+      self._update_progress(90.0, OperationType.BACKUP)
+
+      # Save backup to local file
+      os.makedirs(Paths.backup_root(), exist_ok=True)
+      backup_id = f"backup_{identifier}.json";
+      backup_path = os.path.join(Paths.backup_root(), backup_id)
+      with open(backup_path, 'w') as f:
+        json.dump(payload, f)
+
+      self.backup_status = custom.BackupManagerSP.Status.completed
+      self._update_progress(100.0, OperationType.BACKUP)
+      cloudlog.info("Local backup successfully created")
+      print("Local backup successfully created")
+  
+      return bool(self.backup_status == custom.BackupManagerSP.Status.completed)
+  
+    except Exception as e:
+      cloudlog.exception(f"Error creating backup: {str(e)}")
+      self.backup_status = custom.BackupManagerSP.Status.failed
+      self.last_error = str(e)
+      self._report_status()
+      return False
+
+  async def restore_local_backup(self, identifier: str | None = None) -> bool:
+    """Restores a local backup."""
+    try:
+      self.restore_status = custom.BackupManagerSP.Status.inProgress
+      self._update_progress(0.0, OperationType.RESTORE)
+
+      if identifier is None:
+        identifier = self.sm['carParams'].carFingerprint
+        if identifier is None:
+          raise Exception("Could not determine car fingerprint")
+
+      print(f"Restoring local backup for {identifier}")
+
+      # Get backup data
+      backup_id = f"backup_{identifier}.json";
+      backup_path = os.path.join(Paths.backup_root(), backup_id)
+      with open(backup_path, 'r') as f:
+        backup_data = json.load(f)
+      if not backup_data:
+        raise Exception(f"No backup found for identifier {identifier}")
+
+      self._update_progress(25.0, OperationType.RESTORE)
+
+      backup_metadata = backup_data.get("backup_metadata", [])
+      config_json = backup_data.get("config", "")
+      if not config_json:
+        raise Exception("Empty backup configuration")
+      self._update_progress(50.0, OperationType.RESTORE)
+
+      config_data = json.loads(config_json)
+      self._update_progress(75.0, OperationType.RESTORE)
+
+      # Apply configuration
+      self._apply_config(config_data)
+
+      self.restore_status = custom.BackupManagerSP.Status.completed
+      self._update_progress(100.0, OperationType.RESTORE)
+      print("Local backup successfully restored")
+      return True
+
+    except Exception as e:
+      cloudlog.exception(f"Error restoring backup: {str(e)}")
+      self.restore_status = custom.BackupManagerSP.Status.failed
+      self.last_error = str(e)
+      self._report_status()
+      return False
+
   def _apply_config(self, config_data: dict[str, str]) -> None:
     """Applies configuration data from a backup, but only for parameters marked as backupable."""
     backupable_params = [k.decode('utf-8') for k in self.params.all_keys(ParamKeyFlag.BACKUP)]
@@ -263,6 +367,22 @@ class BackupManagerSP:
             reset_progress = True
           finally:
             self.params.remove("BackupManager_RestoreVersion")
+
+        # Check for local backup command
+        if self.params.get_bool("BackupManager_CreateLocalBackup"):
+          try:
+            if await self.create_local_backup():
+              reset_progress = True
+          finally:
+            self.params.remove("BackupManager_CreateLocalBackup")
+
+        # Check for local restore command
+        if self.params.get("BackupManager_RestoreLocalBackup"):
+          try:
+            await self.restore_local_backup()
+            reset_progress = True
+          finally:
+            self.params.remove("BackupManager_RestoreLocalBackup")
 
         self._report_status()
         rk.keep_time()

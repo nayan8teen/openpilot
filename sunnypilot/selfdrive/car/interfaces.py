@@ -12,6 +12,7 @@ from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.sunnypilot.selfdrive.controls.lib.nnlc.helpers import get_nn_model_path
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.helpers import set_speed_limit_assist_availability
+from openpilot.sunnypilot.sunnylink.backups.manager import BackupManagerSP
 
 import openpilot.system.sentry as sentry
 
@@ -90,6 +91,23 @@ def _cleanup_unsupported_params(CP: structs.CarParams, CP_SP: structs.CarParamsS
     params.remove("SmartCruiseControlMap")
 
   set_speed_limit_assist_availability(CP, CP_SP, params)
+
+
+def switch_vehicle_params(CP: structs.CarParams, CP_PREV: structs.CarParams) -> None:
+  params = Params()
+  if (CP.carFingerprint != "" and CP_PREV.carFingerprint != "" and
+      CP.carFingerprint != CP_PREV.carFingerprint):
+      # TODO-SP: and params.get_bool("BackupManager_SwitchVehicleParams"))
+
+    cloudlog.error(f"Switching vehicle params from {CP_PREV.carFingerprint} to {CP.carFingerprint}")
+    params.put_bool("OffroadMode", True)
+    backup = BackupManagerSP.create_local_backup(CP_PREV.carFingerprint)
+    if backup:
+      cloudlog.error(f"Backed up {CP_PREV.carFingerprint}")
+      restore = BackupManagerSP.restore_local_backup(CP.carFingerprint)
+      if restore:
+        cloudlog.error(f"Restored {CP.carFingerprint}")
+        params.put_bool("DoReboot", True)
 
 
 def setup_interfaces(CI: CarInterfaceBase, params: Params = None) -> None:

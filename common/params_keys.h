@@ -16,7 +16,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AthenadUploadQueue", {PERSISTENT, JSON}},
     {"AthenadRecentlyViewedRoutes", {PERSISTENT, STRING}},
     {"BootCount", {PERSISTENT, INT}},
-    {"CalibrationParams", {PERSISTENT, BYTES}},
+    {"CalibrationParams", {PERSISTENT | BACKUP, BYTES}},
     {"CameraDebugExpGain", {CLEAR_ON_MANAGER_START, STRING}},
     {"CameraDebugExpTime", {CLEAR_ON_MANAGER_START, STRING}},
     {"CarBatteryCapacity", {PERSISTENT, INT}},
@@ -77,9 +77,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LastUpdateTime", {PERSISTENT, TIME}},
     {"LastUpdateUptimeOnroad", {PERSISTENT, FLOAT, "0.0"}},
     {"LiveDelay", {PERSISTENT | BACKUP, BYTES}},
-    {"LiveParameters", {PERSISTENT, JSON}},
-    {"LiveParametersV2", {PERSISTENT, BYTES}},
-    {"LiveTorqueParameters", {PERSISTENT | DONT_LOG, BYTES}},
+    {"LiveParameters", {PERSISTENT | BACKUP, JSON}},
+    {"LiveParametersV2", {PERSISTENT | BACKUP, BYTES}},
+    {"LiveTorqueParameters", {PERSISTENT | DONT_LOG | BACKUP, BYTES}},
     {"LocationFilterInitialState", {PERSISTENT, BYTES}},
     {"LongitudinalManeuverMode", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"LongitudinalPersonality", {PERSISTENT | BACKUP, INT, std::to_string(static_cast<int>(cereal::LongitudinalPersonality::STANDARD))}},
@@ -221,6 +221,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // Backup Manager params
     {"BackupManager_CreateBackup", {PERSISTENT, BOOL}},
     {"BackupManager_RestoreVersion", {PERSISTENT, STRING}},
+    {"BackupManager_CreateLocalBackup", {PERSISTENT, BOOL}},
+    {"BackupManager_RestoreLocalBackup", {PERSISTENT, BOOL}},
+    {"BackupManager_SwitchVehicleParams", {PERSISTENT, BOOL, "0"}},
 
     // sunnypilot car specific params
     {"HyundaiLongitudinalTuning", {PERSISTENT | BACKUP, INT, "0"}},

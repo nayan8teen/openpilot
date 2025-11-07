@@ -190,6 +190,9 @@ class Car:
 
     # log fingerprint in sentry
     sunnypilot_interfaces.log_fingerprint(self.CP)
+    if prev_cp is not None:
+      prev_cp_sp = messaging.log_from_bytes(prev_cp, car.CarParams)
+      sunnypilot_interfaces.switch_vehicle_params(self.CP, prev_cp_sp)
 
   def state_update(self) -> tuple[car.CarState, custom.CarStateSP, structs.RadarDataT | None]:
     """carState update loop, driven by can"""
