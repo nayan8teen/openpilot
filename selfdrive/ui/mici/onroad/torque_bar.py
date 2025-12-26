@@ -208,51 +208,69 @@ class TorqueBar(Widget):
     cx = rect.x + rect.width / 2 + 8  # offset 8px to right of camera feed
     cy = rect.y + rect.height + torque_line_radius - torque_line_offset
 
-    # draw bg torque indicator line
-    bg_pts = arc_bar_pts(cx, cy, mid_r, torque_line_height, torque_start_angle, torque_end_angle, cap_radius=7 * self._scale)
-    draw_polygon(rect, bg_pts, color=torque_line_bg_color)
+    # Steering wheel exclusion area
+    # Note: pos_x in hud_renderer is rect.width / 2 + 9
+    wheel_center_x = rect.x + rect.width / 2 + 9
+    hole_half_width = 34  # Wheel is 70px wide
 
-    # draw torque indicator line
-    a0s = top_angle
-    a1s = a0s + torque_bg_angle_span / 2 * self._torque_filter.x
-    sl_pts = arc_bar_pts(cx, cy, mid_r, torque_line_height, a0s, a1s, cap_radius=7 * self._scale)
+    margin_angle = math.degrees(math.asin(hole_half_width / mid_r))
 
-    # draw beautiful gradient from center to 65% of the bg torque bar width
-    start_grad_pt = cx / rect.width
-    if self._torque_filter.x < 0:
-      end_grad_pt = (cx * (1 - 0.65) + (min(bg_pts[:, 0]) * 0.65)) / rect.width
-    else:
-      end_grad_pt = (cx * (1 - 0.65) + (max(bg_pts[:, 0]) * 0.65)) / rect.width
+    def draw_all():
+      # draw bg torque indicator line
+      bg_pts = arc_bar_pts(cx, cy, mid_r, torque_line_height, torque_start_angle, torque_end_angle)
+      draw_polygon(rect, bg_pts, color=torque_line_bg_color)
 
-    # fade to orange as we approach max torque
-    start_color = blend_colors(
-      rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
-      rl.Color(255, 200, 0, int(255 * self._torque_line_alpha_filter.x)),  # yellow
-      max(0, abs(self._torque_filter.x) - 0.75) * 4,
-    )
-    end_color = blend_colors(
-      rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
-      rl.Color(255, 115, 0, int(255 * self._torque_line_alpha_filter.x)),  # orange
-      max(0, abs(self._torque_filter.x) - 0.75) * 4,
-    )
+      # draw torque indicator line
+      visible_side_span = torque_bg_angle_span / 2 - margin_angle
+      if self._torque_filter.x > 0:
+        a0s = top_angle + margin_angle
+        a1s = a0s + visible_side_span * self._torque_filter.x
+      else:
+        a0s = top_angle - margin_angle
+        a1s = a0s - visible_side_span * abs(self._torque_filter.x)
 
-    if ui_state.status not in (UIStatus.ENGAGED, UIStatus.LAT_ONLY) and not self._demo:
-      start_color = end_color = rl.Color(255, 255, 255, int(255 * 0.35 * self._torque_line_alpha_filter.x))
+      sl_pts = arc_bar_pts(cx, cy, mid_r, torque_line_height, a0s, a1s)
 
-    gradient = Gradient(
-      start=(start_grad_pt, 0),
-      end=(end_grad_pt, 0),
-      colors=[
-        start_color,
-        end_color,
-      ],
-      stops=[0.0, 1.0],
-    )
+      # draw beautiful gradient from center to 65% of the bg torque bar width
+      start_grad_pt = cx / rect.width
+      if self._torque_filter.x < 0:
+        end_grad_pt = (cx * (1 - 0.65) + (min(bg_pts[:, 0]) * 0.65)) / rect.width
+      else:
+        end_grad_pt = (cx * (1 - 0.65) + (max(bg_pts[:, 0]) * 0.65)) / rect.width
 
-    draw_polygon(rect, sl_pts, gradient=gradient)
+      # fade to orange as we approach max torque
+      start_color = blend_colors(
+        rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
+        rl.Color(255, 200, 0, int(255 * self._torque_line_alpha_filter.x)),  # yellow
+        max(0, abs(self._torque_filter.x) - 0.75) * 4,
+      )
+      end_color = blend_colors(
+        rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
+        rl.Color(255, 115, 0, int(255 * self._torque_line_alpha_filter.x)),  # orange
+        max(0, abs(self._torque_filter.x) - 0.75) * 4,
+      )
 
-    # draw center torque bar dot
-    if abs(self._torque_filter.x) < 0.5:
-      dot_y = self._rect.y + self._rect.height - torque_line_offset - torque_line_height / 2
-      rl.draw_circle(int(cx), int(dot_y), (10 // 2 * self._scale),
-                     rl.Color(182, 182, 182, int(255 * 0.9 * self._torque_line_alpha_filter.x)))
+      if ui_state.status not in (UIStatus.ENGAGED, UIStatus.LAT_ONLY) and not self._demo:
+        start_color = end_color = rl.Color(255, 255, 255, int(255 * 0.35 * self._torque_line_alpha_filter.x))
+
+      gradient = Gradient(
+        start=(start_grad_pt, 0),
+        end=(end_grad_pt, 0),
+        colors=[
+          start_color,
+          end_color,
+        ],
+        stops=[0.0, 1.0],
+      )
+
+      draw_polygon(rect, sl_pts, gradient=gradient)
+
+    # Draw left part
+    rl.begin_scissor_mode(int(rect.x), int(rect.y), int(wheel_center_x - hole_half_width - rect.x), int(rect.height))
+    draw_all()
+    rl.end_scissor_mode()
+
+    # Draw right part
+    rl.begin_scissor_mode(int(wheel_center_x + hole_half_width), int(rect.y), int(rect.x + rect.width - (wheel_center_x + hole_half_width)), int(rect.height))
+    draw_all()
+    rl.end_scissor_mode()
