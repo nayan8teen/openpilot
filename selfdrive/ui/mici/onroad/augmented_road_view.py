@@ -170,6 +170,10 @@ class AugmentedRoadView(CameraView):
 
     self._fade_texture = gui_app.texture("icons_mici/onroad/onroad_fade.png")
     self._fade_alpha_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
+    self._dec_blended: rl.Texture = gui_app.texture("icons/experimental.png", 40, 40)
+    self._dec_acc: rl.Texture = gui_app.texture("icons/experimental_white.png", 40, 40)
+    self._dec_active = False
+    self._dec_state = 0
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
@@ -186,6 +190,10 @@ class AugmentedRoadView(CameraView):
       self._offroad_label.set_text("system booting")
     else:
       self._offroad_label.set_text("start the car to\nuse sunnypilot")
+
+    lp_sp = ui_state.sm["longitudinalPlanSP"]
+    self._dec_active = lp_sp.dec.active
+    self._dec_state = lp_sp.dec.state
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     # Don't trigger click callback if bookmark was triggered
@@ -235,7 +243,7 @@ class AugmentedRoadView(CameraView):
                          (ui_state.status != UIStatus.DISENGAGED or ui_state.always_on_dm))
     self._driver_state_renderer.set_should_draw(should_draw_dmoji)
     self._driver_state_renderer.set_position(self._rect.x + 16, self._rect.y + 10)
-    self._driver_state_renderer.render()
+    # self._driver_state_renderer.render()
 
     self._hud_renderer.set_can_draw_top_icons(alert_to_render is None)
     self._hud_renderer.set_wheel_critical_icon(alert_to_render is not None and not not_animating_out and
@@ -244,6 +252,9 @@ class AugmentedRoadView(CameraView):
     if ui_state.started:
       self._alert_renderer.render(self._content_rect)
     self._hud_renderer.render(self._content_rect)
+
+    if self._dec_active and should_draw_dmoji and alert_to_render is None:
+      self._render_dec(self._rect)
 
     # Draw fake rounded border
     rl.draw_rectangle_rounded_lines_ex(self._content_rect, 0.2 * 1.02, 10, 50, rl.BLACK)
@@ -371,6 +382,13 @@ class AugmentedRoadView(CameraView):
   def hide_event(self):
     if gui_app.sunnypilot_ui():
       ui_state.reset_onroad_sleep_timer(OnroadTimerStatus.PAUSE)
+
+  def _render_dec(self, rect):
+    pos_x = int(rect.x + 16)
+    pos_y = int(rect.y + 16)
+    alpha = 190 if self._dec_state == 1 else 100
+    color = rl.Color(255, 255, 255, alpha)
+    rl.draw_texture(self._dec_blended if self._dec_state == 1 else self._dec_acc, pos_x, pos_y, color)
 
 
 if __name__ == "__main__":
