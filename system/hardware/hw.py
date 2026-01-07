@@ -95,3 +95,10 @@ class Paths:
       return str(Path(Paths.comma_home()) / "media" / "0" / "osm")
     else:
       return "/data/media/0/osm"
+
+  @staticmethod
+  def backup_root() -> str:
+    if PC:
+      return str(Path(Paths.comma_home()) / "media" / "0" / "backups")
+    else:
+      return "/data/media/0/backups"

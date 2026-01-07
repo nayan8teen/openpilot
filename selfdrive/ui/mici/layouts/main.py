@@ -1,10 +1,13 @@
 import pyray as rl
 from enum import IntEnum
 import cereal.messaging as messaging
+from cereal import car
+from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
 from openpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
+from openpilot.selfdrive.ui.sunnypilot.mici.widgets.local_restore_dialog import LocalRestoreDialog
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.selfdrive.ui.mici.layouts.onboarding import OnboardingWindow
 from openpilot.system.ui.widgets import Widget
@@ -34,12 +37,14 @@ class MiciMainLayout(Widget):
     self._prev_standstill = False
     self._onroad_time_delay: float | None = None
     self._setup = False
+    self._restore_dlg_checked = False
 
     # Initialize widgets
     self._home_layout = MiciHomeLayout()
     self._alerts_layout = MiciOffroadAlerts()
     self._settings_layout = SettingsLayout()
     self._onroad_layout = AugmentedRoadView(bookmark_callback=self._on_bookmark_clicked)
+    self._params_restore_dlg = None
 
     # Initialize widget rects
     for widget in (self._home_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
@@ -126,6 +131,17 @@ class MiciMainLayout(Widget):
       self._set_mode(MainState.MAIN)
       self._scroll_to(self._onroad_layout)
     self._prev_standstill = CS.standstill
+
+    if not ui_state.started:
+      self._restore_dlg_checked = False
+
+    if gui_app.sunnypilot_ui():
+      if ui_state.started and not self._restore_dlg_checked:
+        if ui_state.sm.recv_frame['carParams'] >= ui_state.started_frame:
+          self._params_restore_dlg = LocalRestoreDialog()
+          if self._params_restore_dlg.car_switch_detected:
+            gui_app.set_modal_overlay(self._params_restore_dlg)
+          self._restore_dlg_checked = True
 
   def _set_mode_for_started(self, onroad_transition: bool = False):
     if ui_state.started:

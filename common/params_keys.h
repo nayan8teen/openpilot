@@ -211,6 +211,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // Backup Manager params
     {"BackupManager_CreateBackup", {PERSISTENT, BOOL}},
     {"BackupManager_RestoreVersion", {PERSISTENT, STRING}},
+    {"BackupManager_LocalBackup", {PERSISTENT, STRING}},
+    {"BackupManager_LocalRestore", {PERSISTENT, STRING}},
 
     // sunnypilot car specific params
     {"HyundaiLongitudinalTuning", {PERSISTENT | BACKUP, INT, "0"}},

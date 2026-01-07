@@ -8,6 +8,7 @@ See the LICENSE.md file in the root directory for more details.
 import base64
 import json
 import requests
+import os
 import time
 from enum import Enum
 from typing import Any
@@ -16,6 +17,7 @@ from openpilot.common.git import get_branch
 from openpilot.common.params import Params, ParamKeyFlag
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.hardware.hw import Paths
 from openpilot.system.version import get_version
 
 from cereal import messaging, custom
@@ -23,10 +25,19 @@ from openpilot.sunnypilot.sunnylink.api import SunnylinkApi
 from openpilot.sunnypilot.sunnylink.backups.utils import decrypt_compressed_data, encrypt_compressed_data, SnakeCaseEncoder
 from openpilot.sunnypilot.sunnylink.utils import get_param_as_byte, save_param_from_base64_encoded_string
 
+BACKUP_DIR = Paths.backup_root()
 
 class OperationType(Enum):
   BACKUP = "backup"
   RESTORE = "restore"
+
+
+def get_local_backup_path(fingerprint: str | None) -> str:
+  # Sanitize fingerprint to be safe for filename
+  if fingerprint is None:
+    return ""
+  safe_fingerprint = fingerprint.replace(" ", "_")
+  return os.path.join(BACKUP_DIR, f"{safe_fingerprint}.json")
 
 
 class BackupManagerSP:
@@ -48,6 +59,9 @@ class BackupManagerSP:
 
     self.last_error = ""
     self._session = requests.Session()  # reuse session to reduce SSL handshake overhead
+
+    if not os.path.exists(BACKUP_DIR):
+      os.makedirs(BACKUP_DIR, exist_ok=True)
 
   def _report_status(self) -> None:
     """Reports current backup manager state through the messaging system."""
@@ -85,7 +99,7 @@ class BackupManagerSP:
   def _get_metadata_value(self, metadata_list, key, default_value=None):
     return next((entry.get("value") for entry in metadata_list if entry.get("key") == key), default_value)
 
-  async def create_backup(self) -> bool:
+  async def create_backup(self, offline: bool = False, fingerprint: str | None = None) -> bool:
     """Creates and uploads a new backup to sunnylink."""
     try:
       self.backup_status = custom.BackupManagerSP.Status.inProgress
@@ -101,10 +115,10 @@ class BackupManagerSP:
       self._update_progress(50.0, OperationType.BACKUP)
 
       backup_info = custom.BackupManagerSP.BackupInfo()
-      backup_info.deviceId = self.device_id
+      backup_info.deviceId = self.device_id if not offline else self.device_id or "Offline"
       backup_info.config = encrypted_config
       backup_info.isEncrypted = True
-      backup_info.createdAt = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+      backup_info.createdAt = "Offline" if offline else time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
       backup_info.updatedAt = backup_info.createdAt
       backup_info.sunnypilotVersion = self._get_current_version()
       backup_info.backupMetadata = [
@@ -116,23 +130,33 @@ class BackupManagerSP:
       payload = json.loads(json.dumps(backup_info.to_dict(), cls=SnakeCaseEncoder))
       self._update_progress(75.0, OperationType.BACKUP)
 
-      cloudlog.debug(f"Uploading backup with payload: {json.dumps(payload)}")
-      # Upload to sunnylink
-      result = self.api.api_get(
-        f"backup/{self.device_id}",
-        method='PUT',
-        access_token=self.api.get_token(),
-        json=payload,
-        session=self._session
-      )
+      if offline:
+        cloudlog.debug(f"Creating local backup with payload: {json.dumps(payload)}")
+        try:
+          with open(get_local_backup_path(fingerprint), 'w') as f:
+            json.dump(payload, f)
+          result = True
+        except Exception:
+          result = False
+
+      else:
+        cloudlog.debug(f"Uploading backup with payload: {json.dumps(payload)}")
+        # Upload to sunnylink
+        result = self.api.api_get(
+          f"backup/{self.device_id}",
+          method='PUT',
+          access_token=self.api.get_token(),
+          json=payload,
+          session=self._session
+        )
 
       if result:
         self.backup_status = custom.BackupManagerSP.Status.completed
         self._update_progress(100.0, OperationType.BACKUP)
-        cloudlog.info("Backup successfully created and uploaded")
+        cloudlog.info(f"Backup successfully created {'and uploaded' if not offline else ''}")
       else:
         self.backup_status = custom.BackupManagerSP.Status.failed
-        self.last_error = "Failed to upload backup"
+        self.last_error = "Failed to upload backup" if not offline else "Failed to create local backup"
         cloudlog.error(result)
         self._report_status()
 
@@ -145,21 +169,32 @@ class BackupManagerSP:
       self._report_status()
       return False
 
-  async def restore_backup(self, version: int | None = None) -> bool:
+  async def restore_backup(self, version: int | None = None, offline: bool = False, fingerprint: str | None = None) -> bool:
     """Restores a backup from sunnylink."""
     try:
       self.restore_status = custom.BackupManagerSP.Status.inProgress
       self._update_progress(0.0, OperationType.RESTORE)
 
-      # Get backup data from API for the specified version
-      endpoint = f"backup/{self.device_id}" + f"/{version or ''}" + "?api-version=1"
-      backup_data = self.api.api_get(endpoint, access_token=self.api.get_token(), session=self._session)
-      if not backup_data:
-        raise Exception(f"No backup found for device {self.device_id}")
+      if offline:
+        try:
+          path = get_local_backup_path(fingerprint)
+          if not os.path.exists(path):
+            raise Exception(f"No local backup found for {fingerprint}")
+
+          with open(path) as f:
+            data = json.load(f)
+        except Exception as e:
+          raise Exception(f"Error rading backup for {fingerprint}") from e
+      else:
+        # Get backup data from API for the specified version
+        endpoint = f"backup/{self.device_id}" + f"/{version or ''}" + "?api-version=1"
+        backup_data = self.api.api_get(endpoint, access_token=self.api.get_token(), session=self._session)
+        if not backup_data:
+          raise Exception(f"No backup found for device {self.device_id}")
+        data = backup_data.json()
 
       self._update_progress(25.0, OperationType.RESTORE)
 
-      data = backup_data.json()
       backup_metadata = data.get("backup_metadata", [])
       encrypted_config = data.get("config", "")
       if not encrypted_config:
@@ -261,11 +296,26 @@ class BackupManagerSP:
         restore_version = self.params.get("BackupManager_RestoreVersion")
         if restore_version:
           try:
-            version = int(restore_version) if restore_version.isdigit() else None
-            await self.restore_backup(version)
+            offline: bool = restore_version == "Offline"
+            await self.restore_backup(version=int(restore_version) if restore_version.isdigit() else None,
+                                      offline=offline, fingerprint="test-fingerprint")
             reset_progress = True
           finally:
             self.params.remove("BackupManager_RestoreVersion")
+
+        if local_backup := self.params.get("BackupManager_LocalBackup"):
+          try:
+            if await self.create_backup(offline=True, fingerprint=local_backup):
+              reset_progress = True
+          finally:
+            self.params.remove("BackupManager_LocalBackup")
+
+        if local_restore := self.params.get("BackupManager_LocalRestore"):
+          try:
+            await self.restore_backup(version=None, offline=True, fingerprint=local_restore)
+            reset_progress = True
+          finally:
+            self.params.remove("BackupManager_LocalRestore")
 
         self._report_status()
         rk.keep_time()
