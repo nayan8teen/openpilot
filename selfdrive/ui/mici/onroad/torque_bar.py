@@ -221,13 +221,13 @@ class TorqueBar(Widget):
       draw_polygon(rect, bg_pts, color=torque_line_bg_color)
 
       # draw torque indicator line
-      half_span = torque_bg_angle_span / 2
-      if self._torque_filter.x > 0.5:
-        a0s = top_angle
-        a1s = top_angle + half_span * self._torque_filter.x
+      visible_side_span = torque_bg_angle_span / 2 - margin_angle
+      if self._torque_filter.x > 0:
+        a0s = top_angle + margin_angle
+        a1s = a0s + visible_side_span * self._torque_filter.x
       else:
-        a0s = top_angle
-        a1s = top_angle - half_span * abs(self._torque_filter.x)
+        a0s = top_angle - margin_angle
+        a1s = a0s - visible_side_span * abs(self._torque_filter.x)
 
       sl_pts = arc_bar_pts(cx, cy, mid_r, torque_line_height, a0s, a1s)
 
@@ -274,20 +274,3 @@ class TorqueBar(Widget):
     rl.begin_scissor_mode(int(wheel_center_x + hole_half_width), int(rect.y), int(rect.x + rect.width - (wheel_center_x + hole_half_width)), int(rect.height))
     draw_all()
     rl.end_scissor_mode()
-
-    # Draw middle part (above wheel, circular cut)
-    wheel_cy = rect.y + rect.height - 22
-    wheel_r = 35
-    step = 1
-    for x in range(int(wheel_center_x - hole_half_width), int(wheel_center_x + hole_half_width), step):
-      dx = (x + step / 2) - wheel_center_x
-      if abs(dx) < wheel_r:
-        circ_y = wheel_cy - math.sqrt(wheel_r**2 - dx**2)
-      else:
-        circ_y = wheel_cy
-
-      h = int(circ_y - rect.y)
-      if h > 0:
-        rl.begin_scissor_mode(x, int(rect.y), step, h)
-        draw_all()
-        rl.end_scissor_mode()
