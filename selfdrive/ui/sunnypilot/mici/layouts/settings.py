@@ -11,7 +11,6 @@ from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigCircleButto
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigConfirmationDialogV2
 from openpilot.selfdrive.ui.sunnypilot.mici.layouts.sunnylink import SunnylinkLayoutMici
 from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import ModelsLayoutMici
-from openpilot.selfdrive.ui.sunnypilot.mici.widgets.button import BigImageButton
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 
@@ -31,8 +30,6 @@ class SettingsLayoutSP(OP.SettingsLayout):
   def __init__(self):
     OP.SettingsLayout.__init__(self)
 
-    sunnylink_qr_btn = BigImageButton(text="use sunnylink to view all settings", value="", qr_code="../../sunnypilot/selfdrive/assets/images/sunnylink_qr.png")
-
     sunnylink_btn = BigButton("sunnylink", "", "icons_mici/settings/developer/ssh.png")
     sunnylink_btn.set_click_callback(lambda: self._set_current_panel(OP.PanelType.SUNNYLINK))
 
@@ -50,8 +47,8 @@ class SettingsLayoutSP(OP.SettingsLayout):
 
     items = self._scroller._items.copy()
 
-    items.insert(0, sunnylink_qr_btn)
     items.insert(0, self.disable_always_offroad_btn)
+
     items.insert(1, sunnylink_btn)
     items.insert(2, models_btn)
     self._scroller._items.clear()
