@@ -154,7 +154,7 @@ class ModelsLayoutMici(NavWidget):
       self._download_progress = self._download_progress + "." if len(self._download_progress) < 3 else ""
 
     self.current_model_info.current_model_header.set_text(tr("active model"))
-    self.current_model_info.current_model_text.set_text(manager.activeBundle.internalName.lower() if manager.activeBundle else tr("default model"))
+    self.current_model_info.current_model_text.set_text(manager.activeBundle.internalName.lower() if manager.activeBundle.index > 0 else tr("default model"))
     self.current_model_info.info_header.set_text(tr("cache size"))
     self.current_model_info.info_text.set_text(f"{ModelsLayout.calculate_cache_size():.2f} MB")
 
