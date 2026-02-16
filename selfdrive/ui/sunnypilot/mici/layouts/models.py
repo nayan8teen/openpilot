@@ -167,7 +167,7 @@ class ModelsLayoutMici(NavWidget):
       self.current_model_info.current_model_header.set_text(tr("downloading"))
       self.current_model_info.current_model_text.set_text(f"{manager.selectedBundle.internalName.lower()}")
       self.current_model_info.info_header.set_text(tr("progress") + self._download_progress)
-      self.current_model_info.current_model_text.set_text(f"{progress/count:.2f}%")
+      self.current_model_info.info_header.set_text(f"{progress/count:.2f}%")
 
 
   def _render(self, rect):
