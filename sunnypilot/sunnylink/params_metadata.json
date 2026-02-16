@@ -4,96 +4,84 @@
     "description": "API Access Token",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "AdbEnabled": {
     "title": "Enable ADB",
     "description": "Android Debug Bridge",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "AlphaLongitudinalEnabled": {
     "title": "Alpha Longitudinal",
     "description": "Alpha longitudinal control",
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "AlwaysOnDM": {
     "title": "Always-on Driver Monitor",
     "description": "Always on Driver Monitoring",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "ApiCache_Device": {
     "title": "Api Cache  Device",
     "description": "Device info cache",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ApiCache_DriveStats": {
     "title": "Api Cache  Drive Stats",
     "description": "Drive stats cache",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ApiCache_FirehoseStats": {
     "title": "Firehose Mode Stats",
     "description": "Cached streaming stats",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "AssistNowToken": {
     "title": "Assist Now Token",
     "description": "GPS assist token",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "AthenadPid": {
     "title": "Athenad Pid",
     "description": "Athena process ID",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "AthenadRecentlyViewedRoutes": {
     "title": "Athenad Recently Viewed Routes",
     "description": "Recently viewed routes cache",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "AthenadUploadQueue": {
     "title": "Athenad Upload Queue",
     "description": "Files queued for upload",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "AutoLaneChangeBsmDelay": {
     "title": "Auto Lane Change BSM Delay",
     "description": "Blind spot monitoring delay",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Other Settings"
+    "hidden": false
   },
   "AutoLaneChangeTimer": {
     "title": "Auto Lane Change Timer",
@@ -130,96 +118,84 @@
     ],
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Other Settings"
+    "hidden": false
   },
   "BackupManager_CreateBackup": {
     "title": "Create Backup",
     "description": "Backup current settings",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Software"
+    "hidden": false
   },
   "BackupManager_RestoreVersion": {
     "title": "Restore Version",
     "description": "Restore settings from backup",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Software"
+    "hidden": false
   },
   "BlindSpot": {
     "title": "[TIZI/TICI only] Blind Spot Detection",
     "description": "Enabling this will display warnings when a vehicle is detected in your blind spot as long as your car has BSM supported.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "BlinkerLateralReengageDelay": {
     "title": "Post-Blinker Delay",
     "description": "Delay before lateral control resumes after the turn signal ends.",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "BlinkerMinLateralControlSpeed": {
     "title": "Blinker Min Lateral Control Speed",
     "description": "Min speed for lat control with blinker",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Other Settings"
+    "hidden": false
   },
   "BlinkerPauseLateralControl": {
     "title": "Blinker Pause Lateral Control",
     "description": "Pause steering when blinking",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Other Settings"
+    "hidden": false
   },
   "BootCount": {
     "title": "Boot Count",
     "description": "Number of boots",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "Brightness": {
     "title": "Screen Brightness",
     "description": "Screen brightness level",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Display"
+    "hidden": false
   },
   "CalibrationParams": {
     "title": "Calibration Params",
     "description": "Camera calibration data",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CameraDebugExpGain": {
     "title": "Camera Debug Exp Gain",
     "description": "Camera exposure gain",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CameraDebugExpTime": {
     "title": "Camera Debug Exp Time",
     "description": "Camera exposure time",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CameraOffset": {
     "title": "Adjust Camera Offset",
@@ -230,8 +206,7 @@
     "unit": "meters",
     "category": "toggles",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarBatteryCapacity": {
     "title": "Car Battery Capacity",
@@ -239,136 +214,119 @@
     "unit": "kWh",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "CarList": {
     "title": "Supported Car List",
     "description": "All supported platform in sunnypilot",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "CarParams": {
     "title": "Car Params",
     "description": "Vehicle parameters",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarParamsCache": {
     "title": "Car Params Cache",
     "description": "Cached vehicle params",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarParamsPersistent": {
     "title": "Car Params Persistent",
     "description": "Persistent vehicle params",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarParamsPrevRoute": {
     "title": "Car Params Prev Route",
     "description": "Params from previous route",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarParamsSP": {
     "title": "Car Params Sp",
     "description": "Sunnypilot vehicle parameters",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarParamsSPCache": {
     "title": "Car Params Sp Cache",
     "description": "Cached Sunnypilot car params",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarParamsSPPersistent": {
     "title": "Car Params Sp Persistent",
     "description": "Persistent SP params",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CarPlatformBundle": {
     "title": "Car Platform Bundle",
     "description": "Platform specific code",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ChevronInfo": {
     "title": "Chevron Info",
     "description": "Lead vehicle info",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "CompletedSunnylinkConsentVersion": {
     "title": "Completed sunnylink Consent Version",
     "description": "",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "CompletedTrainingVersion": {
     "title": "Completed Training Version",
     "description": "Last completed training",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "ControlsReady": {
     "title": "Controls Ready",
     "description": "System ready status",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CurrentBootlog": {
     "title": "Current Bootlog",
     "description": "Log of current boot",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CurrentRoute": {
     "title": "Current Route",
     "description": "Active drive route",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "CustomAccIncrementsEnabled": {
     "title": "Custom ACC Increments",
     "description": "Enable custom speed steps",
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "CustomAccLongPressIncrement": {
     "title": "Custom ACC Long Press Increment",
@@ -378,8 +336,7 @@
     "step": 1,
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "CustomAccShortPressIncrement": {
     "title": "Custom ACC Short Press Increment",
@@ -389,24 +346,21 @@
     "step": 1,
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "CustomTorqueParams": {
     "title": "Enable Custom Torque Tuning",
     "description": "Enables custom tuning for Torque lateral control",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Torque Tuning"
+    "hidden": false
   },
   "DevUIInfo": {
     "title": "Developer UI Info",
     "description": "Developer UI overlay data",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "DeviceBootMode": {
     "title": "Device Boot Mode",
@@ -423,280 +377,245 @@
     ],
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "DisableLogging": {
     "title": "Disable Logging",
     "description": "Stop data logging",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "DisablePowerDown": {
     "title": "Disable Power Down",
     "description": "Stay on after ignition off",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "DisableUpdates": {
     "title": "Disable Updates",
     "description": "Skip software updates",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "DisengageOnAccelerator": {
     "title": "Disengage On Accelerator",
     "description": "Disengage when gas pressed",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "DoReboot": {
     "title": "Reboot",
     "description": "Restart the device immediately",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Power Management"
+    "hidden": false
   },
   "DoShutdown": {
     "title": "Power Off",
     "description": "Power off the device immediately",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Power Management"
+    "hidden": false
   },
   "DoUninstall": {
     "title": "Uninstall sunnypilot",
     "description": "Uninstall sunnypilot",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Software"
+    "hidden": false
   },
   "DongleId": {
     "title": "Device ID",
     "description": "Unique device identifier",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "DriverTooDistracted": {
     "title": "Driver Too Distracted",
     "description": "Currently the driver is considered too distracted",
     "category": "toggles",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "DynamicExperimentalControl": {
     "title": "Dynamic Experimental Control",
     "description": "Auto-toggle experimental mode",
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "EnableCopyparty": {
     "title": "copyparty Service",
     "description": "Enable Copyparty file server",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "EnableGithubRunner": {
     "title": "GitHub Runner Service",
     "description": "Enable CI/CD runner",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "EnableSunnylinkUploader": {
     "title": "Enable sunnylink Uploader",
     "description": "Upload drives to sunnylink",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "EnforceTorqueControl": {
     "title": "Enforce Torque Control",
     "description": "Enable this to enforce sunnypilot to steer with Torque lateral control.",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Torque Tuning"
+    "hidden": false
   },
   "ExperimentalMode": {
     "title": "Experimental Mode",
     "description": "Enable experimental features",
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "ExperimentalModeConfirmed": {
     "title": "Experimental Mode Confirmed",
     "description": "User confirmed exp mode",
     "category": "toggles",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "FirmwareQueryDone": {
     "title": "Firmware Query Done",
     "description": "Firmware check complete",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ForcePowerDown": {
     "title": "Force Power Down",
     "description": "Force immediate shutdown",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Power Management"
+    "hidden": false
   },
   "GitBranch": {
     "title": "Git Branch",
     "description": "Current git branch",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "GitCommit": {
     "title": "Git Commit",
     "description": "Current software version",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "GitCommitDate": {
     "title": "Git Commit Date",
     "description": "Date of current commit",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "GitDiff": {
     "title": "Git Diff",
     "description": "Local file modifications",
     "category": "device",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "GitRemote": {
     "title": "Git Remote",
     "description": "Git remote origin URL",
     "category": "device",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "GithubRunnerSufficientVoltage": {
     "title": "Github Runner Sufficient Voltage",
     "description": "Check voltage for GitHub runner",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "GithubSshKeys": {
     "title": "Github Ssh Keys",
     "description": "SSH keys for GitHub access",
     "category": "device",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "GithubUsername": {
     "title": "GitHub Username",
     "description": "Connected GitHub account",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "GreenLightAlert": {
     "title": "Green Traffic Light Alert (Beta)",
     "description": "A chime and on-screen alert (TIZI/TICI only) will play when the traffic light you are waiting for turns green and you have no vehicle in front of you. <br>Note: This chime is only designed as a notification. It is the driver's responsibility to observe their environment and make decisions accordingly.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "GsmApn": {
     "title": "GSM APN",
     "description": "Access Point Name",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Network"
+    "hidden": false
   },
   "GsmMetered": {
     "title": "Gsm Metered",
     "description": "Cellular data metering",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Network"
+    "hidden": false
   },
   "GsmRoaming": {
     "title": "GSM Roaming",
     "description": "Allow cellular roaming",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Network"
+    "hidden": false
   },
   "HardwareSerial": {
     "title": "Serial Number",
     "description": "Hardware serial number",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "HasAcceptedTerms": {
     "title": "Has Accepted Terms",
     "description": "User accepted terms",
     "category": "device",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "HasAcceptedTermsSP": {
     "title": "Has Accepted sunnypilot Terms",
     "description": "",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "HideVEgoUI": {
     "title": "[TIZI/TICI only] Speedometer: Hide from Onroad Screen",
     "description": "When enabled, the speedometer on the onroad screen is not displayed.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "HyundaiLongitudinalTuning": {
     "title": "Hyundai Longitudinal Tuning",
@@ -717,24 +636,21 @@
     ],
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Hyundai"
+    "hidden": false
   },
   "InstallDate": {
     "title": "Install Date",
     "description": "Installation timestamp",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "IntelligentCruiseButtonManagement": {
     "title": "Intelligent Cruise Button Management",
     "description": "Enhanced cruise button logic",
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "InteractivityTimeout": {
     "title": "Interactivity Timeout",
@@ -795,120 +711,105 @@
     ],
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Display"
+    "hidden": false
   },
   "IsDevelopmentBranch": {
     "title": "Is Development Branch",
     "description": "On development channel",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsDriverViewEnabled": {
     "title": "Is Driver View Enabled",
     "description": "Show driver monitoring camera",
     "category": "visuals",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsEngaged": {
     "title": "Is Engaged",
     "description": "Currently engaged",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsLdwEnabled": {
     "title": "Lane Departure Warnings",
     "description": "Lane departure warnings",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "IsMetric": {
     "title": "Use Metric Units",
     "description": "Display metric measurements",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "IsOffroad": {
     "title": "Is Offroad",
     "description": "Not currently driving",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsOnroad": {
     "title": "Is Onroad",
     "description": "Currently driving",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsReleaseBranch": {
     "title": "Is Release Branch",
     "description": "On release software",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsReleaseSpBranch": {
     "title": "Is Release Sp Branch",
     "description": "On Sunnypilot release branch",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsRhdDetected": {
     "title": "Is Rhd Detected",
     "description": "System detected RHD status",
     "category": "device",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsTakingSnapshot": {
     "title": "Is Taking Snapshot",
     "description": "Camera capturing",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "IsTestedBranch": {
     "title": "Is Tested Branch",
     "description": "On tested software",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "JoystickDebugMode": {
     "title": "Joystick Debug Mode",
     "description": "Enable joystick debugging",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "LagdToggle": {
     "title": "Live Learning Steer Delay",
     "description": "Allow device to learn and adapt car's steering response time",
     "category": "toggles",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LagdToggleDelay": {
     "title": "Manual Software Delay",
@@ -918,24 +819,21 @@
     "step": 0.01,
     "category": "toggles",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LagdValueCache": {
     "title": "LaGD Value Cache",
     "description": "Cached LAQD values",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LaneTurnDesire": {
     "title": "Lane Turn Desire",
     "description": "Force model to plan an intent to turn based on blinker",
     "category": "toggles",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LaneTurnValue": {
     "title": "Lane Turn Speed",
@@ -945,184 +843,161 @@
     "step": 1,
     "category": "toggles",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LanguageSetting": {
     "title": "Language",
     "description": "UI language",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "LastAgnosPowerMonitorShutdown": {
     "title": "Last AGNOS Power Monitor Shutdown",
     "description": "",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "LastAthenaPingTime": {
     "title": "Last Athena Ping Time",
     "description": "Last server contact",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastGPSPosition": {
     "title": "Last Gps Position",
     "description": "GPS coordinates",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastGPSPositionLLK": {
     "title": "Last GPS Position LLK",
     "description": "Last precise GPS loc",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastManagerExitReason": {
     "title": "Last Manager Exit Reason",
     "description": "Reason for last process exit",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastOffroadStatusPacket": {
     "title": "Last Offroad Status Packet",
     "description": "Last status update",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastPowerDropDetected": {
     "title": "Last Power Drop Detected",
     "description": "Last power drop event",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastSunnylinkPingTime": {
     "title": "Last sunnylink Ping Time",
     "description": "Unknown setting from device",
     "category": "other",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastUpdateException": {
     "title": "Last Update Exception",
     "description": "Update error info",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "LastUpdateRouteCount": {
     "title": "Last Update Route Count",
     "description": "Routes since last update",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LastUpdateTime": {
     "title": "Last Update Time",
     "description": "Last update timestamp",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "LastUpdateUptimeOnroad": {
     "title": "Last Update Uptime Onroad",
     "description": "Driving time since update",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LeadDepartAlert": {
     "title": "Lead Departure Alert (Beta)",
     "description": "A chime and on-screen alert (TIZI/TICI only) will play when you are stopped, and the vehicle in front of you start moving. <br>Note: This chime is only designed as a notification. It is the driver's responsibility to observe their environment and make decisions accordingly.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "LiveDelay": {
     "title": "Live Delay",
     "description": "Communication delay",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LiveParameters": {
     "title": "Live Parameters",
     "description": "Runtime parameters",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LiveParametersV2": {
     "title": "Live Parameters V2",
     "description": "Runtime vehicle params V2",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LiveTorqueParameters": {
     "title": "Live Torque Parameters",
     "description": "Current torque parameters",
     "category": "steering",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LiveTorqueParamsRelaxedToggle": {
     "title": "Less Restrict Settings for Self-Tune (Beta)",
     "description": "Less strict settings when using Self-Tune. This allows torqued to be more forgiving when learning values.",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Torque Tuning"
+    "hidden": false
   },
   "LiveTorqueParamsToggle": {
     "title": "Self-Tune",
     "description": "Enables self-tune for Torque lateral control",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Torque Tuning"
+    "hidden": false
   },
   "LocationFilterInitialState": {
     "title": "Location Filter Initial State",
     "description": "Location filter state",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "LongitudinalManeuverMode": {
     "title": "Longitudinal Maneuver Mode",
     "description": "Specialized maneuver handling",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "LongitudinalPersonality": {
     "title": "Driving Personality",
@@ -1143,24 +1018,21 @@
     ],
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "Mads": {
     "title": "MADS Enabled",
     "description": "Modular Automated Driving System",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "MADS"
+    "hidden": false
   },
   "MadsMainCruiseAllowed": {
     "title": "MADS Main Cruise Allowed",
     "description": "Allow MADS with main cruise",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "MADS"
+    "hidden": false
   },
   "MadsSteeringMode": {
     "title": "MADS Steering Mode",
@@ -1181,48 +1053,42 @@
     ],
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "MADS"
+    "hidden": false
   },
   "MadsUnifiedEngagementMode": {
     "title": "MADS Unified Engagement Mode",
     "description": "Engage MADS with Cruise",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "MADS"
+    "hidden": false
   },
   "MapAdvisorySpeedLimit": {
     "title": "Map Advisory Speed Limit",
     "description": "Respect map advisory limits",
     "category": "cruise",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "MapSpeedLimit": {
     "title": "Map Speed Limit",
     "description": "Current speed limit from map",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "MapTargetVelocities": {
     "title": "Map Target Velocities",
     "description": "Map-based velocity targets",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "MapdVersion": {
     "title": "Mapd Version",
     "description": "Map daemon version",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "MaxTimeOffroad": {
     "title": "Max Time Offroad",
@@ -1230,64 +1096,56 @@
     "unit": "minutes",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Power Management"
+    "hidden": false
   },
   "ModelManager_ActiveBundle": {
     "title": "Model Manager Active Bundle",
     "description": "Currently active model",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ModelManager_ClearCache": {
     "title": "Model Manager Clear Cache",
     "description": "Delete downloaded models",
     "category": "other",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ModelManager_DownloadIndex": {
     "title": "Model Manager Download Index",
     "description": "Download queue index",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ModelManager_Favs": {
     "title": "Model Manager Favorites",
     "description": "Favorite drive models",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ModelManager_LastSyncTime": {
     "title": "Model Manager Last Sync Time",
     "description": "Last model list sync",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ModelManager_ModelsCache": {
     "title": "Model Manager Models Cache",
     "description": "Cached model list",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ModelRunnerTypeCache": {
     "title": "Model Runner Type Cache",
     "description": "Inference engine type",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "NetworkMetered": {
     "title": "Network Usage",
@@ -1308,192 +1166,168 @@
     ],
     "category": "device",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "NeuralNetworkLateralControl": {
     "title": "Neural Network Lateral Control",
     "description": "Neural network steering control",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Other Settings"
+    "hidden": false
   },
   "NextMapSpeedLimit": {
     "title": "Next Map Speed Limit",
     "description": "Upcoming speed limit",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OSMDownloadBounds": {
     "title": "OSM Download Bounds",
     "description": "Map area boundaries",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OSMDownloadLocations": {
     "title": "OSM Download Locations",
     "description": "Queued map downloads",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OSMDownloadProgress": {
     "title": "OSM Download Progress",
     "description": "Map download status",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ObdMultiplexingChanged": {
     "title": "Obd Multiplexing Changed",
     "description": "Multiplexing setting changed",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ObdMultiplexingEnabled": {
     "title": "Obd Multiplexing Enabled",
     "description": "Enable OBD multiplexing",
     "category": "developer",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": true
   },
   "OffroadMode": {
     "title": "Force Offroad Mode",
     "description": "Forced offroad mode",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "Offroad_CarUnrecognized": {
     "title": "Offroad Car Unrecognized",
     "description": "Unknown vehicle",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_ConnectivityNeeded": {
     "title": "Offroad Connectivity Needed",
     "description": "Internet required",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_ConnectivityNeededPrompt": {
     "title": "Offroad Connectivity Needed Prompt",
     "description": "Prompt for internet",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_DriverMonitoringUncertain": {
     "title": "Offroad Driver Monitoring Uncertain",
     "description": "Driver monitoring checking",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_ExcessiveActuation": {
     "title": "Offroad Excessive Actuation",
     "description": "Controls saturation detected",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_IsTakingSnapshot": {
     "title": "Offroad Is Taking Snapshot",
     "description": "Snapshot in progress",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_NeosUpdate": {
     "title": "Offroad Neos Update",
     "description": "OS update required",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_NoFirmware": {
     "title": "Offroad No Firmware",
     "description": "Firmware missing",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_OSMUpdateRequired": {
     "title": "Offroad OSM Update Required",
     "description": "OSM maps need update",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_Recalibration": {
     "title": "Offroad Recalibration",
     "description": "Recalibration required",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_TemperatureTooHigh": {
     "title": "Offroad Temperature Too High",
     "description": "Overheating",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_TiciSupport": {
     "title": "Offroad Tici Support",
     "description": "TiCi hardware support status",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_UnregisteredHardware": {
     "title": "Offroad Unregistered Hardware",
     "description": "Device not registered",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "Offroad_UpdateFailed": {
     "title": "Offroad Update Failed",
     "description": "Update error",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OnroadCycleRequested": {
     "title": "Onroad Cycle Requested",
     "description": "Cycle start requested",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OnroadScreenOffBrightness": {
     "title": "Onroad Brightness",
@@ -1590,16 +1424,14 @@
     ],
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Display"
+    "hidden": false
   },
   "OnroadScreenOffControl": {
     "title": "Onroad Brightness",
     "description": "Adjusts the screen brightness while it's in onroad state.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Display"
+    "hidden": false
   },
   "OnroadScreenOffTimer": {
     "title": "Onroad Brightness Delay",
@@ -1656,120 +1488,105 @@
     ],
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Display"
+    "hidden": false
   },
   "OnroadUploads": {
     "title": "Onroad Uploads",
     "description": "Enable Onroad Uploads",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "OpenpilotEnabledToggle": {
     "title": "Enable sunnypilot",
     "description": "Master sunnypilot toggle",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "OsmDbUpdatesCheck": {
     "title": "OSM DB Updates Check",
     "description": "Last map update check",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmDownloadedDate": {
     "title": "OSM Downloaded Date",
     "description": "Date of downloaded maps",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmLocal": {
     "title": "OSM Local",
     "description": "Use local OSM server",
     "category": "other",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmLocationName": {
     "title": "OSM Location Name",
     "description": "Current location details",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmLocationTitle": {
     "title": "OSM Location Title",
     "description": "Current location title",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmLocationUrl": {
     "title": "OSM Location URL",
     "description": "OSM Location Link",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmStateName": {
     "title": "OSM State Name",
     "description": "Current OSM state code",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmStateTitle": {
     "title": "OSM State Title",
     "description": "Current OSM region",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "OsmWayTest": {
     "title": "OSM Way Test",
     "description": "Debug OSM way query",
     "category": "other",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "PandaHeartbeatLost": {
     "title": "Panda Heartbeat Lost",
     "description": "Comms loss status",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "PandaSignatures": {
     "title": "Panda Signatures",
     "description": "Firmware signatures",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "PandaSomResetTriggered": {
     "title": "Panda Som Reset Triggered",
     "description": "Reset trigger status",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "PlanplusControl": {
     "title": "Plan Plus Controls",
@@ -1779,160 +1596,140 @@
     "step": 0.1,
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "PrimeType": {
     "title": "Prime Type",
     "description": "Prime subscription type",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "QuickBootToggle": {
     "title": "Quick Boot",
     "description": "Enable quick boot",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "QuietMode": {
     "title": "Quiet Mode",
     "description": "Minimize sound notifications",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "RainbowMode": {
     "title": "Rainbow Mode",
     "description": "Display rainbow road visualization",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "RecordAudio": {
     "title": "Record & Upload Mic Audio",
     "description": "Record cabin audio",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "RecordAudioFeedback": {
     "title": "Record Audio Feedback",
     "description": "Audio feedback status",
     "category": "device",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "RecordFront": {
     "title": "Record & Upload Driver Camera",
     "description": "Front camera recording",
     "category": "device",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "RecordFrontLock": {
     "title": "Record Front Lock",
     "description": "Prevent deleting front recordings",
     "category": "device",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "RoadName": {
     "title": "Road Name",
     "description": "Current road name",
     "category": "visuals",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "RoadNameToggle": {
     "title": "[TIZI/TICI only] Display Road Name",
     "description": "Displays the name of the road the car is traveling on. <br>The OpenStreetMap database of the location must be downloaded to fetch the road name.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "RocketFuel": {
     "title": "[TIZI/TICI only] Real-time Acceleration Bar",
     "description": "Show an indicator on the left side of the screen to display real-time vehicle acceleration and deceleration. This displays what the car is currently doing, not what the planner is requesting.",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "RouteCount": {
     "title": "Route Count",
     "description": "Total number of routes",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "SecOCKey": {
     "title": "Sec Oc Key",
     "description": "Security key",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "ShowAdvancedControls": {
     "title": "Show Advanced Controls",
     "description": "Enable to show advanced controls on device",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "ShowDebugInfo": {
     "title": "UI Debug Mode",
     "description": "Display developer metrics",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "ShowTurnSignals": {
     "title": "[TIZI/TICI only] Display Turn Signals",
     "description": "When enabled, visual turn indicators are drawn on the HUD.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "SmartCruiseControlMap": {
     "title": "Smart Cruise Control - Map",
     "description": "Map-based smart cruise",
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Smart Cruise Control"
+    "hidden": false
   },
   "SmartCruiseControlVision": {
     "title": "Smart Cruise Control - Vision",
     "description": "Vision-based smart cruise",
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Smart Cruise Control"
+    "hidden": false
   },
   "SnoozeUpdate": {
     "title": "Snooze Update",
     "description": "Update snooze timer",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "SpeedLimitMode": {
     "title": "Speed Limit Assist Mode",
@@ -1957,8 +1754,7 @@
     ],
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Speed Limit Assist"
+    "hidden": false
   },
   "SpeedLimitOffsetType": {
     "title": "Speed Limit Offset Type",
@@ -1979,8 +1775,7 @@
     ],
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Speed Limit Assist"
+    "hidden": false
   },
   "SpeedLimitPolicy": {
     "title": "Speed Limit Source",
@@ -2009,8 +1804,7 @@
     ],
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Speed Limit Assist"
+    "hidden": false
   },
   "SpeedLimitValueOffset": {
     "title": "Speed Limit Offset Value",
@@ -2020,112 +1814,98 @@
     "step": 1,
     "category": "cruise",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Speed Limit Assist"
+    "hidden": false
   },
   "SshEnabled": {
     "title": "Enable SSH",
     "description": "SSH access enabled",
     "category": "developer",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "StandstillTimer": {
     "title": "[TIZI/TICI only] Standstill Timer",
     "description": "Show a timer on the HUD when the car is at a standstill.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "SubaruStopAndGo": {
     "title": "Subaru Stop and Go",
     "description": "Enable Subaru Stop & Go",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Subaru"
+    "hidden": false
   },
   "SubaruStopAndGoManualParkingBrake": {
     "title": "Subaru Stop and Go Manual Parking Brake",
     "description": "Subaru Stop&Go manual brake",
     "category": "toggles",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Subaru"
+    "hidden": false
   },
   "SunnylinkCache_Roles": {
     "title": "sunnylink Cache  Roles",
     "description": "Cached role data",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "SunnylinkCache_Users": {
     "title": "sunnylink Cache  Users",
     "description": "Cached user data",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "SunnylinkDongleId": {
     "title": "sunnylink Dongle ID",
     "description": "sunnylink device identifier",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "SunnylinkEnabled": {
     "title": "sunnylink Enabled",
     "description": "Enable sunnylink services",
     "category": "developer",
     "readonly": false,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "SunnylinkTempFault": {
     "title": "sunnylink Temp Fault",
     "description": "Temporary connection fault",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "SunnylinkdPid": {
     "title": "Sunnylinkd Pid",
     "description": "sunnylink process ID",
     "category": "other",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "TermsVersion": {
     "title": "Terms Version",
     "description": "Accepted terms version",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "TeslaCoopSteering": {
     "title": "Tesla Coop Steering",
     "description": "Allow driver steering input",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Tesla"
+    "hidden": false
   },
   "TorqueBar": {
     "title": "[TIZI/TICI only] Steering Arc",
     "description": "Display steering arc on the driving screen when lateral control is enabled.",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "TorqueControlTune": {
     "title": "Torque Control Tune Version",
@@ -2146,16 +1926,14 @@
     ],
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "TorqueParamsOverrideEnabled": {
     "title": "Manual Real-Time Tuning",
     "description": "Enable manual real-time tuning override",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Torque Tuning"
+    "hidden": false
   },
   "TorqueParamsOverrideFriction": {
     "title": "Manual Tune - Friction",
@@ -2165,8 +1943,7 @@
     "step": 0.01,
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Torque Tuning"
+    "hidden": false
   },
   "TorqueParamsOverrideLatAccelFactor": {
     "title": "Manual Tune - Lateral Acceleration Factor",
@@ -2177,151 +1954,132 @@
     "unit": "m/s\u00b2",
     "category": "steering",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Torque Tuning"
+    "hidden": false
   },
   "ToyotaEnforceStockLongitudinal": {
     "title": "Toyota: Enforce Factory Longitudinal Control",
     "description": "When enabled, sunnypilot will not take over control of gas and brakes. Factory Toyota longitudinal control will be used.",
     "category": "default",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "TrainingVersion": {
     "title": "Training Version",
     "description": "Training software version",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "TrueVEgoUI": {
     "title": "[TIZI/TICI only] Speedometer: Always Display True Speed",
     "description": "For applicable vehicles, always display the true vehicle current speed from wheel speed sensors.",
     "category": "visuals",
     "readonly": false,
-    "hidden": false,
-    "sub_category": "Onroad Visuals"
+    "hidden": false
   },
   "UbloxAvailable": {
     "title": "Ublox Available",
     "description": "GPS hardware status",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdateAvailable": {
     "title": "Update Available",
     "description": "Update ready",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "UpdateFailedCount": {
     "title": "Update Failed Count",
     "description": "Failed update attempts",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "UpdaterAvailableBranches": {
     "title": "Updater Available Branches",
     "description": "Update branches",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "UpdaterCurrentDescription": {
     "title": "Updater Current Description",
     "description": "Current branch info",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdaterCurrentReleaseNotes": {
     "title": "Updater Current Release Notes",
     "description": "Release notes",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdaterFetchAvailable": {
     "title": "Updater Fetch Available",
     "description": "Update check ready",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdaterLastFetchTime": {
     "title": "Updater Last Fetch Time",
     "description": "Time of last update check",
     "category": "device",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdaterNewDescription": {
     "title": "Updater New Description",
     "description": "New version info",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdaterNewReleaseNotes": {
     "title": "Updater New Release Notes",
     "description": "New release notes",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdaterState": {
     "title": "Updater State",
     "description": "Update system state",
     "category": "developer",
     "readonly": true,
-    "hidden": true,
-    "sub_category": "default"
+    "hidden": true
   },
   "UpdaterTargetBranch": {
     "title": "Updater Target Branch",
     "description": "Update target branch",
     "category": "developer",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "sunnypilot CI Settings"
+    "hidden": false
   },
   "UptimeOffroad": {
     "title": "Uptime Offroad",
     "description": "System idle time",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "UptimeOnroad": {
     "title": "Uptime Onroad",
     "description": "Session driving time",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   },
   "Version": {
     "title": "openpilot Version",
     "description": "Software version number",
     "category": "device",
     "readonly": true,
-    "hidden": false,
-    "sub_category": "default"
+    "hidden": false
   }
 }
