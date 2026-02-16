@@ -35,10 +35,6 @@ def main():
       data[key_str] = {
         "title": key_str,
         "description": "",
-        "hidden": False,
-        "readonly": False,
-        "category": "",
-        "sub-category": ""
       }
 
   # Remove deleted keys
@@ -48,10 +44,10 @@ def main():
   #   del data[k]
 
   # Sort keys
-  # sorted_data = dict(sorted(data.items()))
+  sorted_data = dict(sorted(data.items()))
 
   with open(METADATA_PATH, "w") as f:
-    json.dump(data, f, indent=2)
+    json.dump(sorted_data, f, indent=2)
     f.write("\n")
 
   print(f"Updated {METADATA_PATH}")
