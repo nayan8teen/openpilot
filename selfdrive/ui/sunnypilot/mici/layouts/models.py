@@ -26,21 +26,21 @@ class CurrentModelInfo(Widget):
     header_color = rl.Color(255, 255, 255, int(255 * 0.9))
     subheader_color = rl.Color(255, 255, 255, int(255 * 0.9 * 0.65))
     max_width = int(self._rect.width - 20)
-    self._current_model_header = MiciLabel("active model", 48, width=max_width, color=header_color, font_weight=FontWeight.DISPLAY)
+    self.current_model_header = MiciLabel(tr("active model"), 48, width=max_width, color=header_color, font_weight=FontWeight.DISPLAY)
     self.current_model_text = MiciLabel(tr("default model"), 32, width=max_width, color=subheader_color, font_weight=FontWeight.ROMAN)
 
-    self.info_label = MiciLabel("", 48, color=header_color, font_weight=FontWeight.DISPLAY)
+    self.info_header = MiciLabel("", 48, color=header_color, font_weight=FontWeight.DISPLAY)
     self.info_text = MiciLabel("", 32, width=max_width, color=subheader_color, font_weight=FontWeight.ROMAN)
 
   def _render(self, _):
-    self._current_model_header.set_position(self._rect.x + 20, self._rect.y - 10)
-    self._current_model_header.render()
+    self.current_model_header.set_position(self._rect.x + 20, self._rect.y - 10)
+    self.current_model_header.render()
 
     self.current_model_text.set_position(self._rect.x + 20, self._rect.y + 68 - 25)
     self.current_model_text.render()
 
-    self.info_label.set_position(self._rect.x + 20, self._rect.y + 114 - 30)
-    self.info_label.render()
+    self.info_header.set_position(self._rect.x + 20, self._rect.y + 114 - 30)
+    self.info_header.render()
 
     self.info_text.set_position(self._rect.x + 20, self._rect.y + 161 - 25)
     self.info_text.render()
@@ -144,15 +144,22 @@ class ModelsLayoutMici(NavWidget):
   def _update_state(self):
     super()._update_state()
 
+    self.select_model_btn.set_enabled(ui_state.is_offroad())
+    self.cancel_download_btn.set_visible(False)
+
     manager = self.model_manager
     self._download_frame += 1
     should_update = self._download_frame % (gui_app.target_fps / 2) == 0
     if should_update:
       self._download_progress = self._download_progress + "." if len(self._download_progress) < 3 else ""
 
+    self.current_model_info.current_model_header.set_text(tr("active model"))
+    self.current_model_info.current_model_text.set_text(manager.activeBundle.internalName.lower() if manager.activeBundle else tr("default model"))
+    self.current_model_info.info_header.set_text(tr("cache size"))
+    self.current_model_info.info_text.set_text(f"{ModelsLayout.calculate_cache_size():.2f} MB")
+
     if manager.selectedBundle and manager.selectedBundle.status == custom.ModelManagerSP.DownloadStatus.failed:
-      self.cancel_download_btn.set_visible(False)
-      self.current_model_info.info_label.set_text(tr("error") + self._download_progress)
+      self.current_model_info.info_header.set_text(tr("error") + self._download_progress)
       self.current_model_info.info_text.set_text(tr("download failed"))
 
     elif manager.selectedBundle and manager.selectedBundle.status == custom.ModelManagerSP.DownloadStatus.downloading:
@@ -168,16 +175,10 @@ class ModelsLayoutMici(NavWidget):
                           custom.ModelManagerSP.DownloadStatus.cached):
           progress += 100.0
 
-      self.current_model_info.info_label.set_text(tr("downloading") + self._download_progress)
-      self.current_model_info.info_text.set_text(f"{manager.selectedBundle.internalName.lower} {progress/count:.2f}%")
-
-    else:
-      self.current_model_info.current_model_text.set_text(manager.activeBundle.internalName.lower() if manager.activeBundle else tr("default model"))
-      self.cancel_download_btn.set_visible(False)
-      self.current_model_info.info_label.set_text(tr("cache size"))
-      self.current_model_info.info_text.set_text(f"{ModelsLayout.calculate_cache_size():.2f} MB")
-
-    self.select_model_btn.set_enabled(ui_state.is_offroad())
+      self.current_model_info.current_model_header.set_text(tr("downloading"))
+      self.current_model_info.current_model_text.set_text(f"{manager.selectedBundle.internalName.lower()}")
+      self.current_model_info.info_header.set_text(tr("progress") + self._download_progress)
+      self.current_model_info.current_model_text.set_text(f"{progress/count:.2f}%")
 
 
   def _render(self, rect):
