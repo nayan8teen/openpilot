@@ -183,6 +183,7 @@ class UIStateSP:
     self.boot_offroad_mode = self.params.get("DeviceBootMode", return_default=True)
     self.always_offroad = self.params.get_bool("OffroadMode")
     self.screensaver_enabled = self.params.get_bool("ScreenSaverEnabled")
+    self.alt_torque_bar = self.params.get_bool("AltTorqueBar")
 
     if not self._sp_initialized:
       self._sp_initialized = True
