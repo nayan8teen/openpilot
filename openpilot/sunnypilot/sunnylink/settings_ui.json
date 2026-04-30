@@ -1375,6 +1375,12 @@
               ]
             },
             {
+              "key": "AltTorqueBar",
+              "widget": "toggle",
+              "title": "Alternative Torque Bar",
+              "description": "Alternative implementation of steering wheel & torque bar for the Comma 4."
+            },
+            {
               "key": "ShowTurnSignals",
               "widget": "toggle",
               "title": "Display Turn Signals",
