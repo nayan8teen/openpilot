@@ -163,6 +163,7 @@ procs = [
   DaemonProcess("manage_sunnylinkd", "openpilot.sunnypilot.sunnylink.athena.manage_sunnylinkd", "SunnylinkdPid"),
   PythonProcess("sunnylink_registration_manager", "openpilot.sunnypilot.sunnylink.registration_manager", sunnylink_need_register_shim),
   PythonProcess("statsd_sp", "openpilot.sunnypilot.sunnylink.statsd", and_(always_run, sunnylink_ready_shim)),
+  PythonProcess("sunnylink_local_server", "openpilot.sunnypilot.sunnylink.local_server", and_(always_run, sunnylink_ready_shim)),
 ]
 
 # sunnypilot
