@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import datetime
 import os
+import platform
 import signal
 import sys
 import time
@@ -221,7 +222,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-  unblock_stdout()
+  if platform.system() != "Darwin":
+    unblock_stdout()
 
   try:
     main()

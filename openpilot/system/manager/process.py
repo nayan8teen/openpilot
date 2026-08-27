@@ -1,5 +1,6 @@
 import importlib
 import os
+import platform
 import signal
 import time
 import subprocess
@@ -201,10 +202,13 @@ class DaemonProcess(ManagerProcess):
     if pid is not None:
       try:
         os.kill(int(pid), 0)
-        with open(f'/proc/{pid}/cmdline') as f:
-          if self.module in f.read():
-            # daemon is running
-            return
+        if platform.system() == 'Darwin':
+          return
+        else:
+          with open(f'/proc/{pid}/cmdline') as f:
+            if self.module in f.read():
+              # daemon is running
+              return
       except (OSError, FileNotFoundError):
         # process is dead
         pass
