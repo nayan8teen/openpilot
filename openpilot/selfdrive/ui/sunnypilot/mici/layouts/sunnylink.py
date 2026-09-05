@@ -18,7 +18,10 @@ from openpilot.sunnypilot.sunnylink.api import UNREGISTERED_SUNNYLINK_DONGLE_ID
 from openpilot.sunnypilot.sunnylink.athena.local_discovery import latest_discovered_app
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   LocalApp,
+  arm_pairing,
+  clear_pairing_request,
   get_local_apps,
+  pairing_requested,
   read_pairing_code,
   remove_local_app,
 )
@@ -85,11 +88,16 @@ class SunnylinkLayoutMici(NavScroller):
                                                 toggle_callback=self._sunnylink_uploader_callback)
 
     # Local (LAN) mode rows — the sunnylink mobile app acts as the backend on
-    # this network. Discovery lives on the app side; these mirror what the
-    # device sees: an app offering pairing + the code to type into it (while
-    # unpaired), or the apps currently paired, each with an unpair action.
+    # this network. Pairing is an explicit device-side action: the "Pair App"
+    # button arms a 5-minute window (discovery + the code to type into the
+    # app). These mirror what the device sees: an app offering pairing + the
+    # code to type into it (while a window is armed), or the apps currently
+    # paired, each with an unpair action.
     self._local_apps_cache: list[LocalApp] = []
     self._local_discovered: tuple[str, int] | None = None
+
+    self._pair_app_btn = BigButton(tr("pair app"), "")
+    self._pair_app_btn.set_click_callback(lambda: arm_pairing())
 
     self._local_discovered_btn = BigButton(tr("local app"), tr("not discovered"))
     self._local_discovered_btn.set_touch_valid_callback(lambda: False)
@@ -107,6 +115,7 @@ class SunnylinkLayoutMici(NavScroller):
       self._sunnylink_toggle,
       self._sunnylink_sponsor_button,
       self._sunnylink_pair_button,
+      self._pair_app_btn,
       self._local_discovered_btn,
       self._pairing_code_btn,
       *self._local_app_btns,
@@ -142,6 +151,7 @@ class SunnylinkLayoutMici(NavScroller):
       self._sunnylink_pair_button.set_text(tr("paired"))
     else:
       self._sunnylink_pair_button.set_text(tr("pair"))
+    self._pair_app_btn.set_visible(self._sunnylink_enabled and not pairing_requested())
     self._refresh_local_rows()
 
   # --- Local (LAN) mode helpers ----------------------------------------------
@@ -152,12 +162,12 @@ class SunnylinkLayoutMici(NavScroller):
     self._local_discovered = latest_discovered_app()
     paired = bool(self._local_apps_cache)
 
-    # Discovery + pairing-code rows: shown while sunnylink is on and nothing is
-    # paired yet. The pairing code is generated whenever the device is unpaired
-    # (the rotator runs independently of discovery), so it must stay readable
-    # even while no app beacon is in sight; the discovery button reads
-    # "not discovered" until the phone announces itself.
-    show_unpaired = self._sunnylink_enabled and not paired
+    # Discovery + pairing-code rows: shown while sunnylink is on and a pairing
+    # window is armed (the "Pair App" button was pressed). The code is
+    # generated at arm time and self-expires with the window, so it stays
+    # readable even while no app beacon is in sight; the discovery button
+    # reads "not discovered" until the phone announces itself.
+    show_unpaired = self._sunnylink_enabled and pairing_requested()
     self._local_discovered_btn.set_visible(show_unpaired)
     self._pairing_code_btn.set_visible(show_unpaired)
 
@@ -223,6 +233,8 @@ class SunnylinkLayoutMici(NavScroller):
       gui_app.push_widget(sl_terms_dlg)
     else:
       ui_state.params.put_bool("SunnylinkEnabled", state)
+      if not state:
+        clear_pairing_request()
 
     ui_state.update_params()
 

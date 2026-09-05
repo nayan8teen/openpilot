@@ -20,7 +20,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   DISCOVERED_APP_KEY,
   SUNNYLINK_LOCAL_UDP_PORT,
   format_endpoint,
-  is_locally_paired,
+  pairing_requested,
 )
 
 # App beacons older than this are stale (the app left the network). Shared by
@@ -78,14 +78,12 @@ class LocalDiscovery(threading.Thread):
 
   The APP drives discovery — it periodically broadcasts its beacon to
   <broadcast>:53133/udp. This thread listens on the same port and remembers the
-  most recent app endpoint heard:
-
-  - Unpaired device: [latest_endpoint] is exposed so sunnylinkd can dial the
-    app and run the pairing handshake (the app then asks the user for the code
-    displayed on this device's screen).
-  - Paired device: beacons are IGNORED. The app endpoint is pinned at pairing
-    time (`SunnylinkLocalApps`) and a random LAN beacon must never redirect a
-    paired device.
+  most recent app endpoint heard — but ONLY while a pairing window is armed
+  (the on-device "Pair App" button). Pairing is an explicit device-side
+  action: outside a window no beacons are processed, nothing is written to
+  params, and [latest_endpoint] stays empty, so a paired device can never be
+  redirected by a random LAN beacon and an unpaired device never auto-offers
+  pairing on its own.
 
   No new dependencies: stdlib `socket` only.
   """
@@ -98,6 +96,7 @@ class LocalDiscovery(threading.Thread):
     # Test seam: inject a bound UDP socket. None → bind the fixed LAN port.
     self._sock = sock
     self._latest_endpoint: str | None = None
+    self._latest_app_id: str | None = None
     self._last_seen_monotonic: float = 0.0
     self._lock = threading.Lock()
     self._stop_event = threading.Event()
@@ -119,9 +118,14 @@ class LocalDiscovery(threading.Thread):
         pass
 
   def latest_endpoint(self) -> str | None:
-    """The most recently announced app endpoint (None while paired or nothing heard)."""
+    """The most recently announced app endpoint (None outside a pairing window)."""
     with self._lock:
       return self._latest_endpoint
+
+  def latest_app_id(self) -> str | None:
+    """The app_id of the most recently announced beacon (None outside a window)."""
+    with self._lock:
+      return self._latest_app_id
 
   def last_seen_ago(self) -> float | None:
     """Seconds since the last app beacon was heard (None when none heard yet)."""
@@ -134,12 +138,18 @@ class LocalDiscovery(threading.Thread):
     beacon = parse_beacon(raw, source_ip)
     if beacon is None:
       return
-    if is_locally_paired(self.params):
-      # Paired devices pin the endpoint from pairing — never a random beacon.
+    if not pairing_requested(self.params):
+      # Discovery runs only while a pairing window is armed. Beacons heard
+      # outside a window (and any stale status left behind) are dropped.
+      with self._lock:
+        self._latest_endpoint = None
+        self._latest_app_id = None
+        self._last_seen_monotonic = 0.0
       self._clear_discovered_param()
       return
     with self._lock:
       self._latest_endpoint = beacon.endpoint
+      self._latest_app_id = beacon.app_id
       self._last_seen_monotonic = time.monotonic()
     self._write_discovered_param(beacon)
     cloudlog.debug(f"local_discovery.app_found {beacon.app_id} at {beacon.endpoint}")

@@ -14,8 +14,11 @@ from openpilot.sunnypilot.sunnylink.api import UNREGISTERED_SUNNYLINK_DONGLE_ID
 from openpilot.sunnypilot.sunnylink.athena.local_discovery import latest_discovered_app
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   LocalApp,
+  arm_pairing,
+  clear_pairing_request,
   get_local_apps,
   is_locally_paired,
+  pairing_requested,
   read_pairing_code,
   remove_local_app,
 )
@@ -209,12 +212,23 @@ class SunnylinkLayout(Widget):
     self._restore_btn.set_button_style(ButtonStyle.PRIMARY)
 
     # --- Local (LAN) mode rows -----------------------------------------------
-    # While unpaired: "app discovered" + the pairing code to type into the app.
-    # While paired: one row per paired app with an UNPAIR button. Contents and
-    # visibility (row + its separator) refresh every frame in _update_state, so
-    # hidden rows leave no stray divider lines behind.
+    # Pairing is an explicit device-side action: the "Pair App" button arms a
+    # 5-minute window (discovery + the code to type into the app). While the
+    # window is armed: "app discovered" + the pairing code rows show. While
+    # apps are paired: one row per paired app with an UNPAIR button. Contents
+    # and visibility (row + its separator) refresh every frame in
+    # _update_state, so hidden rows leave no stray divider lines behind.
     self._local_apps_cache: list[LocalApp] = []
     self._local_discovered: tuple[str, int] | None = None  # (endpoint, age_s)
+
+    self._pair_app_btn = button_item_sp(
+      title=tr("Pair App"),
+      button_text=tr("PAIR"),
+      description=tr("Connect a mobile app over Wi-Fi. Starts a 5-minute pairing window: ") +
+                  tr("type the code below into the app to complete pairing."),
+      callback=self._arm_pairing,
+    )
+    self._pair_app_btn.set_visible(lambda: self._pair_app_btn_visible())
 
     self._local_discovered_text = TextAction(tr("Not discovered"), color=_LOCAL_DISCOVERED_COLOR)
     self._local_discovered_row = ListItemSP(title=tr("Local app"), action_item=self._local_discovered_text)
@@ -226,7 +240,7 @@ class SunnylinkLayout(Widget):
 
     for w in (self._local_discovered_row, self._local_discovered_sep,
               self._pairing_code_row, self._pairing_code_sep):
-      w.set_visible(lambda: self._unpaired_local_rows_visible())
+      w.set_visible(lambda: self._pairing_rows_visible())
 
     self._local_app_rows: list[ListItemSP] = []
     self._local_app_seps: list[LineSeparator] = []
@@ -252,6 +266,8 @@ class SunnylinkLayout(Widget):
       self._sponsor_btn,
       LineSeparator(),
       self._pair_btn,
+      LineSeparator(),
+      self._pair_app_btn,
       LineSeparator(),
       self._local_discovered_row,
       self._local_discovered_sep,
@@ -376,6 +392,8 @@ class SunnylinkLayout(Widget):
       gui_app.push_widget(sl_terms_dlg)
     else:
       ui_state.params.put_bool("SunnylinkEnabled", state)
+      if not state:
+        clear_pairing_request()
       self._update_description(state)
 
   def _update_description(self, state: bool):
@@ -414,13 +432,22 @@ class SunnylinkLayout(Widget):
 
   # --- Local (LAN) mode helpers ----------------------------------------------
 
-  def _unpaired_local_rows_visible(self) -> bool:
-    """Discovered/code rows: shown while sunnylink is on and no app is paired
-    yet. The pairing code is generated whenever the device is unpaired (the
-    rotator runs independently of discovery), so it must stay readable even
-    while no app beacon is in sight; the discovery row shows "Not discovered"
-    until the phone announces itself."""
-    return self._sunnylink_enabled and not is_locally_paired()
+  def _pair_app_btn_visible(self) -> bool:
+    """The Pair App button shows whenever sunnylink is on and no pairing
+    window is armed — including while other apps are already paired, since a
+    window can be re-armed to add another app."""
+    return self._sunnylink_enabled and not pairing_requested()
+
+  def _arm_pairing(self):
+    arm_pairing()
+
+  def _pairing_rows_visible(self) -> bool:
+    """Discovered/code rows: shown while sunnylink is on and a pairing window
+    is armed (the "Pair App" button was pressed). The code is generated at
+    arm time and self-expires with the window, so it stays readable even while
+    no app beacon is in sight; the discovery row shows "Not discovered" until
+    the phone announces itself."""
+    return self._sunnylink_enabled and pairing_requested()
 
   def _paired_local_row_visible(self, i: int) -> bool:
     return self._sunnylink_enabled and is_locally_paired() and i < len(self._local_apps_cache)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 import threading
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, UTC
 from typing import Any
@@ -24,6 +25,10 @@ SUNNYLINK_LOCAL_WS_PORT = 8443
 
 LOCAL_APPS_KEY = "SunnylinkLocalApps"
 PAIRING_CODE_KEY = "SunnylinkLocalPairingCode"
+# Set True by the on-device "Pair App" button while a pairing window is armed.
+# Discovery, the pairing code, and the pairing-offer dial run ONLY inside this
+# window (pairing is an explicit device-side action, never an auto-offer).
+PAIRING_REQUEST_KEY = "SunnylinkLocalPairingRequest"
 # Status written by the discovery listener (most recent app beacon) so the
 # on-device settings UI can show "app discovered" across processes.
 DISCOVERED_APP_KEY = "SunnylinkLocalDiscoveredApp"
@@ -33,6 +38,11 @@ DISCOVERED_APP_KEY = "SunnylinkLocalDiscoveredApp"
 PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 DEFAULT_CODE_ROTATION_S = 10 * 60  # re-roll the displayed code every 10 min
+# How long an armed pairing window stays open before it self-expires (and the
+# request flag is dropped). The device-side "Pair App" action is a deliberate
+# short-lived window; after it lapses the device returns to its normal
+# connection selection (paired local endpoints / cloud).
+PAIRING_WINDOW_S = 5 * 60
 
 # Beacons carry the app's identity + WS port. The device itself never
 # broadcasts — discovery lives on the app side (it announces, we listen).
@@ -110,6 +120,12 @@ def generate_pairing_code() -> str:
   return "".join(secrets.choice(PAIRING_CODE_ALPHABET) for _ in range(PAIRING_CODE_LENGTH))
 
 
+def _write_pairing_code(code: str, params: Params) -> None:
+  """Persist the code together with its armed-at timestamp (the pairing window
+  is derived from that timestamp, so the code and window always agree)."""
+  params.put(PAIRING_CODE_KEY, {"code": code, "ts": int(time.time())}, block=True)  # noqa: TID251
+
+
 def read_pairing_code(params: Params | None = None) -> str | None:
   """The stored pairing code, or None when cleared / not yet generated."""
   params = params or Params()
@@ -121,13 +137,60 @@ def read_pairing_code(params: Params | None = None) -> str | None:
 
 
 def get_pairing_code(params: Params | None = None) -> str:
-  """The current displayed pairing code, generating one on first use."""
+  """The current displayed pairing code, generating (and persisting) one on
+  first use. A code is only meaningful inside a pairing window — `arm_pairing`
+  is the button-driven path that always rolls a fresh one."""
   params = params or Params()
   code = read_pairing_code(params)
   if code is None:
     code = generate_pairing_code()
-    params.put(PAIRING_CODE_KEY, {"code": code}, block=True)
+    _write_pairing_code(code, params)
   return code
+
+
+def pairing_requested(params: Params | None = None) -> bool:
+  """
+  True while the on-device "Pair App" window is armed and still fresh.
+
+  The window is self-expiring: when the request flag is set but the pairing
+  code (which carries the armed-at timestamp) is missing or older than
+  [PAIRING_WINDOW_S], the flag is dropped and False is returned. Every caller
+  (the discovery listener, sunnylinkd's connection selection, the settings UI
+  row visibility) consults this, so the window closes itself wherever it is
+  next read.
+  """
+  params = params or Params()
+  if not params.get_bool(PAIRING_REQUEST_KEY):
+    return False
+  data = params.get(PAIRING_CODE_KEY)
+  ts = data.get("ts") if isinstance(data, dict) else None
+  if not isinstance(ts, (int, float)) or time.time() - ts > PAIRING_WINDOW_S:  # noqa: TID251
+    clear_pairing_request(params)
+    return False
+  return True
+
+
+def arm_pairing(params: Params | None = None) -> str:
+  """
+  Arm a pairing window and return the code the user types into the app.
+
+  Always rolls a fresh code (and a fresh window timestamp); the flag is set
+  only after the code is persisted, so `pairing_requested` never observes an
+  armed flag without a valid code. Re-arming after a timeout or an unpair just
+  starts a new window.
+  """
+  params = params or Params()
+  code = generate_pairing_code()
+  _write_pairing_code(code, params)
+  params.put_bool(PAIRING_REQUEST_KEY, True, block=True)
+  return code
+
+
+def clear_pairing_request(params: Params | None = None) -> None:
+  """Close the pairing window: drop the request flag and the code together."""
+  params = params or Params()
+  params.remove(PAIRING_REQUEST_KEY)
+  params.remove(PAIRING_CODE_KEY)
 
 
 def verify_pairing_code(code: str, params: Params | None = None) -> bool:
@@ -141,14 +204,13 @@ def verify_pairing_code(code: str, params: Params | None = None) -> bool:
 
 class PairingCodeRotator(threading.Thread):
   """
-  Keeps the on-screen pairing code fresh while the device is unpaired.
+  Keeps the on-screen pairing code fresh while a pairing window is armed.
 
-  - Immediately on start: generate a code if none is stored (or it was cleared
-    by a manager restart).
-  - Every [rotation_s]: re-roll the code while still unpaired.
-  - Once an app is paired the code is meaningless, so it is cleared and the
-    thread idles; unpairing (registry emptied) re-arms rotation with a fresh
-    code on the next tick.
+  - Immediately on start, and every [rotation_s] after: re-roll the code while
+    a pairing window is armed (fresh code + fresh window timestamp).
+  - No window armed: the code is cleared and the thread idles. Pairing is an
+    explicit device-side action (the "Pair App" button arms the window), so
+    the code is never generated on its own.
   """
 
   def __init__(self, params: Params | None = None, rotation_s: float = DEFAULT_CODE_ROTATION_S,
@@ -161,11 +223,12 @@ class PairingCodeRotator(threading.Thread):
     self.tick_cb = tick_cb
 
   def rotate(self) -> None:
-    """One rotation pass: clear the code when paired, otherwise re-roll it."""
-    if is_locally_paired(self.params):
-      self.params.remove(PAIRING_CODE_KEY)
+    """One rotation pass: re-roll the code while the window is armed, clear it
+    (and the window, if it expired) otherwise."""
+    if pairing_requested(self.params):
+      _write_pairing_code(generate_pairing_code(), self.params)
     else:
-      self.params.put(PAIRING_CODE_KEY, {"code": generate_pairing_code()}, block=True)
+      self.params.remove(PAIRING_CODE_KEY)
 
   def run(self) -> None:
     self.rotate()

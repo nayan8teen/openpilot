@@ -20,12 +20,16 @@ from openpilot.sunnypilot.sunnylink.athena.local_discovery import (
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   DISCOVERED_APP_KEY,
   LOCAL_APPS_KEY,
+  PAIRING_CODE_KEY,
+  PAIRING_REQUEST_KEY,
   LocalApp,
   add_local_app,
+  arm_pairing,
+  clear_pairing_request,
 )
 
 # Params keys these tests write (restored in teardown).
-_WRITTEN_KEYS = (LOCAL_APPS_KEY, DISCOVERED_APP_KEY)
+_WRITTEN_KEYS = (LOCAL_APPS_KEY, DISCOVERED_APP_KEY, PAIRING_REQUEST_KEY, PAIRING_CODE_KEY)
 
 
 def beacon(app_id="app-1", ws_port=8443) -> bytes:
@@ -94,20 +98,23 @@ class TestLocalDiscovery(OpenpilotTestCase):
       time.sleep(0.02)
     return None
 
-  def test_records_app_endpoint_when_unpaired(self):
+  def test_records_app_endpoint_while_window_armed(self):
+    arm_pairing(self.params)
     listener, sender, addr = self._make_pair()
     discovery = LocalDiscovery(self.params, sock=listener)
     discovery.start()
     try:
       sender.sendto(beacon(), addr)
       assert self._wait_for_endpoint(discovery, "ws://127.0.0.1:8443")
+      assert discovery.latest_app_id() == "app-1"
     finally:
       discovery.stop()
       discovery.join(timeout=2)
       sender.close()
 
-  def test_writes_discovered_param_when_unpaired(self):
+  def test_writes_discovered_param_while_window_armed(self):
     """A fresh app beacon is mirrored into the status param for the settings UI."""
+    arm_pairing(self.params)
     listener, sender, addr = self._make_pair()
     discovery = LocalDiscovery(self.params, sock=listener)
     discovery.start()
@@ -124,8 +131,9 @@ class TestLocalDiscovery(OpenpilotTestCase):
       discovery.join(timeout=2)
       sender.close()
 
-  def test_ignores_beacons_when_paired(self):
-    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
+  def test_ignores_beacons_without_window(self):
+    """No pairing window armed → beacons are ignored entirely (even a device
+    with an empty registry never listens on its own; pairing is button-driven)."""
     listener, sender, addr = self._make_pair()
     discovery = LocalDiscovery(self.params, sock=listener)
     discovery.start()
@@ -133,14 +141,34 @@ class TestLocalDiscovery(OpenpilotTestCase):
       sender.sendto(beacon("other-app"), addr)
       time.sleep(0.3)
       assert discovery.latest_endpoint() is None
+      assert discovery.latest_app_id() is None
     finally:
       discovery.stop()
       discovery.join(timeout=2)
       sender.close()
 
-  def test_clears_discovered_param_when_paired(self):
-    """Once paired, beacons are ignored AND any stale discovered status is dropped."""
+  def test_records_new_app_beacon_while_paired(self):
+    """A device already paired to one app still listens during a window — so a
+    SECOND app can be discovered and paired (multi-app support)."""
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
+    arm_pairing(self.params)
+    listener, sender, addr = self._make_pair()
+    discovery = LocalDiscovery(self.params, sock=listener)
+    discovery.start()
+    try:
+      sender.sendto(beacon("app-2", 8443), addr)
+      assert self._wait_for_endpoint(discovery, "ws://127.0.0.1:8443")
+      assert discovery.latest_app_id() == "app-2"
+    finally:
+      discovery.stop()
+      discovery.join(timeout=2)
+      sender.close()
+
+  def test_clears_discovered_param_when_window_closed(self):
+    """Once the window closes, beacons are ignored AND any stale discovered
+    status is dropped."""
+    arm_pairing(self.params)
+    clear_pairing_request(self.params)
     self.params.put(DISCOVERED_APP_KEY,
                     {"endpoint": "ws://10.0.0.9:8443", "app_id": "old",
                      "ts": int(time.time())},  # noqa: TID251 -- wall-clock ts

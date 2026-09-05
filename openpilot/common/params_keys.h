@@ -235,8 +235,13 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // stored as a JSON document {"code": "..."}.
     {"SunnylinkLocalPairingCode", {CLEAR_ON_MANAGER_START, JSON}},
     // SunnylinkLocalDiscoveredApp: JSON {endpoint, app_id, ts} of the most recent app beacon
-    // (unpaired only). Written by the discovery listener for the settings UI; cleared on boot.
+    // (only while a pairing window is armed). Written by the discovery listener for the
+    // settings UI; cleared on boot.
     {"SunnylinkLocalDiscoveredApp", {CLEAR_ON_MANAGER_START, JSON}},
+    // SunnylinkLocalPairingRequest: set True by the on-device "Pair App" button to arm a
+    // pairing window (discovery + code + pairing-offer dial run only while set). Cleared on
+    // pair success, window expiry (~5 min), or manager restart.
+    {"SunnylinkLocalPairingRequest", {CLEAR_ON_MANAGER_START, BOOL}},
 
     // Backup Manager params
     {"BackupManager_CreateBackup", {PERSISTENT, BOOL}},

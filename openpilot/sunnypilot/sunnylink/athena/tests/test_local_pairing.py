@@ -14,15 +14,20 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   PAIRING_CODE_ALPHABET,
   PAIRING_CODE_KEY,
   PAIRING_CODE_LENGTH,
+  PAIRING_REQUEST_KEY,
+  PAIRING_WINDOW_S,
   LOCAL_APPS_KEY,
   LocalApp,
   PairingCodeRotator,
   add_local_app,
+  arm_pairing,
+  clear_pairing_request,
   generate_pairing_code,
   get_local_apps,
   get_pairing_code,
   is_locally_paired,
   local_identity,
+  pairing_requested,
   read_pairing_code,
   remove_all_local_apps,
   remove_local_app,
@@ -36,7 +41,7 @@ def _put_raw(params: Params, key: str, value: bytes) -> None:
   params_put(params.p, key.encode(), value, len(value), True)
 
 # Params keys these tests write (restored in teardown).
-_WRITTEN_KEYS = (LOCAL_APPS_KEY, PAIRING_CODE_KEY, "DongleId", "HardwareSerial")
+_WRITTEN_KEYS = (LOCAL_APPS_KEY, PAIRING_CODE_KEY, PAIRING_REQUEST_KEY, "DongleId", "HardwareSerial")
 
 
 class TestPairingCode(OpenpilotTestCase):
@@ -61,7 +66,9 @@ class TestPairingCode(OpenpilotTestCase):
     self.params.remove(PAIRING_CODE_KEY)
     code = get_pairing_code(self.params)
     assert len(code) == PAIRING_CODE_LENGTH
-    assert self.params.get(PAIRING_CODE_KEY) == {"code": code}
+    doc = self.params.get(PAIRING_CODE_KEY)
+    assert doc["code"] == code
+    assert isinstance(doc.get("ts"), int)  # armed-at timestamp drives the window
     assert read_pairing_code(self.params) == code
     # Stable across reads until rotated.
     assert get_pairing_code(self.params) == code
@@ -154,10 +161,10 @@ class TestLocalAppsRegistry(OpenpilotTestCase):
     assert not is_locally_paired(self.params)
 
 
-class TestPairingCodeRotator(OpenpilotTestCase):
+class TestPairingWindow(OpenpilotTestCase):
   def setup_method(self):
     self.params = Params()
-    self.saved = {key: self.params.get(key) for key in (LOCAL_APPS_KEY, PAIRING_CODE_KEY)}
+    self.saved = {key: self.params.get(key) for key in (PAIRING_REQUEST_KEY, PAIRING_CODE_KEY)}
 
   def teardown_method(self):
     for key, value in self.saved.items():
@@ -166,23 +173,82 @@ class TestPairingCodeRotator(OpenpilotTestCase):
       else:
         self.params.put(key, value, block=True)
 
-  def test_rotate_generates_code_while_unpaired(self):
-    self.params.remove(PAIRING_CODE_KEY)
+  def test_arm_pairing_sets_flag_and_fresh_code(self):
+    code = arm_pairing(self.params)
+    assert len(code) == PAIRING_CODE_LENGTH
+    assert self.params.get_bool(PAIRING_REQUEST_KEY)
+    assert read_pairing_code(self.params) == code
+    assert pairing_requested(self.params)
+
+  def test_arm_pairing_rerolls_code_each_time(self):
+    first = arm_pairing(self.params)
+    second = arm_pairing(self.params)
+    assert pairing_requested(self.params)
+    assert read_pairing_code(self.params) == second
+    assert second != first, "a re-armed window always rolls a fresh code"
+
+  def test_clear_pairing_request_drops_flag_and_code(self):
+    arm_pairing(self.params)
+    clear_pairing_request(self.params)
+    assert not pairing_requested(self.params)
+    assert self.params.get(PAIRING_CODE_KEY) is None
+
+  def test_requested_false_without_flag(self):
+    assert not pairing_requested(self.params)
+
+  def test_requested_ignores_flag_without_valid_code(self):
+    self.params.put_bool(PAIRING_REQUEST_KEY, True, block=True)
+    assert not pairing_requested(self.params)
+    assert not self.params.get_bool(PAIRING_REQUEST_KEY)  # self-cleared
+
+  def test_window_expires_and_self_clears(self):
+    arm_pairing(self.params)
+    # Age the code's armed-at timestamp beyond the window.
+    self.params.put(PAIRING_CODE_KEY,
+                    {"code": "ABC123", "ts": int(time.time()) - PAIRING_WINDOW_S - 1},  # noqa: TID251
+                    block=True)
+    assert not pairing_requested(self.params)
+    assert not self.params.get_bool(PAIRING_REQUEST_KEY)
+    assert self.params.get(PAIRING_CODE_KEY) is None
+
+
+class TestPairingCodeRotator(OpenpilotTestCase):
+  def setup_method(self):
+    self.params = Params()
+    self.saved = {key: self.params.get(key) for key in (PAIRING_REQUEST_KEY, PAIRING_CODE_KEY)}
+
+  def teardown_method(self):
+    for key, value in self.saved.items():
+      if value is None:
+        self.params.remove(key)
+      else:
+        self.params.put(key, value, block=True)
+
+  def test_rotate_generates_code_while_window_armed(self):
+    arm_pairing(self.params)
     rotator = PairingCodeRotator(self.params)
     rotator.rotate()
-    assert self.params.get(PAIRING_CODE_KEY) == {"code": read_pairing_code(self.params)}
     assert read_pairing_code(self.params) is not None
     assert len(read_pairing_code(self.params)) == PAIRING_CODE_LENGTH
+    assert pairing_requested(self.params)
 
-  def test_rotate_clears_code_while_paired(self):
-    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
-    get_pairing_code(self.params)
+  def test_rotate_rerolls_code_while_armed(self):
+    arm_pairing(self.params)
+    first = read_pairing_code(self.params)
+    rotator = PairingCodeRotator(self.params)
+    rotator.rotate()
+    second = read_pairing_code(self.params)
+    assert second is not None and second != first
+
+  def test_rotate_clears_code_when_window_closed(self):
+    arm_pairing(self.params)
+    clear_pairing_request(self.params)
     rotator = PairingCodeRotator(self.params)
     rotator.rotate()
     assert self.params.get(PAIRING_CODE_KEY) is None
 
   def test_thread_rotates_on_interval(self):
-    self.params.remove(PAIRING_CODE_KEY)
+    arm_pairing(self.params)
     stop = threading.Event()
     rotator = PairingCodeRotator(self.params, rotation_s=0.05, stop_event=stop)
     rotator.start()

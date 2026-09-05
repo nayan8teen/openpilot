@@ -6,6 +6,7 @@ See the LICENSE.md file in the root directory for more details.
 """
 import json
 import queue
+import threading
 import time
 
 from openpilot.common.params import Params
@@ -58,10 +59,11 @@ class TestPairLocalAppHandler(OpenpilotTestCase):
   def setup_method(self):
     self.registry: list[LocalApp] = []
 
-  def test_success_pins_active_endpoint(self, mocker):
+  def test_success_pins_active_endpoint_and_closes_window(self, mocker):
     mocker.patch.object(sunnylinkd, "_active_local_endpoint", "ws://10.0.0.5:8443")
     mocker.patch.object(sunnylinkd, "verify_pairing_code", return_value=True)
     mocker.patch.object(sunnylinkd, "add_local_app", side_effect=lambda app: self.registry.append(app))
+    mocker.patch.object(sunnylinkd, "clear_pairing_request")  # window closes on success
 
     result = sunnylinkd.pairLocalApp(code="ABC123", app_id="app-1", app_name="Pixel 9")
     assert result == {"success": True}
@@ -70,11 +72,14 @@ class TestPairLocalAppHandler(OpenpilotTestCase):
     assert app.app_id == "app-1"
     assert app.endpoint == "ws://10.0.0.5:8443"
     assert app.app_name == "Pixel 9"
+    sunnylinkd.clear_pairing_request.assert_called_once()
 
   def test_invalid_code_rejected(self, mocker):
     mocker.patch.object(sunnylinkd, "_active_local_endpoint", "ws://10.0.0.5:8443")
     mocker.patch.object(sunnylinkd, "verify_pairing_code", return_value=False)
     mocker.patch.object(sunnylinkd, "add_local_app", side_effect=AssertionError("must not pair"))
+    mocker.patch.object(sunnylinkd, "clear_pairing_request",
+                        side_effect=AssertionError("window must stay open on failure"))
 
     result = sunnylinkd.pairLocalApp(code="WRONG")
     assert result["success"] is False
@@ -83,6 +88,8 @@ class TestPairLocalAppHandler(OpenpilotTestCase):
   def test_rejected_without_local_connection(self, mocker):
     mocker.patch.object(sunnylinkd, "_active_local_endpoint", None)
     mocker.patch.object(sunnylinkd, "verify_pairing_code", return_value=True)
+    mocker.patch.object(sunnylinkd, "clear_pairing_request",
+                        side_effect=AssertionError("window must stay open on failure"))
     result = sunnylinkd.pairLocalApp(code="ABC123")
     assert result["success"] is False
 
@@ -98,6 +105,7 @@ class TestPairingSession(OpenpilotTestCase):
   def test_pairs_over_session(self, mocker):
     mocker.patch.object(sunnylinkd, "_active_local_endpoint", "ws://10.0.0.5:8443")
     paired = {"value": False}
+    armed = {"value": True}
 
     def fake_verify(code):
       return code == "ABC123"
@@ -105,9 +113,14 @@ class TestPairingSession(OpenpilotTestCase):
     def fake_add(app):
       paired["value"] = True  # the registry gains the app
 
+    def fake_clear():
+      armed["value"] = False  # pairLocalApp closes the pairing window
+
     mocker.patch.object(sunnylinkd, "verify_pairing_code", side_effect=fake_verify)
     mocker.patch.object(sunnylinkd, "add_local_app", side_effect=fake_add)
     mocker.patch.object(sunnylinkd, "is_locally_paired", side_effect=lambda: paired["value"])
+    mocker.patch.object(sunnylinkd, "pairing_requested", side_effect=lambda: armed["value"])
+    mocker.patch.object(sunnylinkd, "clear_pairing_request", side_effect=fake_clear)
 
     ws = FakePairingWs()
     ws.feed_call("pairLocalApp", {"code": "ABC123", "app_id": "app-1"})
@@ -122,6 +135,9 @@ class TestPairingSession(OpenpilotTestCase):
     mocker.patch.object(sunnylinkd, "verify_pairing_code", return_value=False)
     mocker.patch.object(sunnylinkd, "is_locally_paired", return_value=False)
     mocker.patch.object(sunnylinkd, "add_local_app", side_effect=AssertionError("must not pair"))
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
+    mocker.patch.object(sunnylinkd, "clear_pairing_request",
+                        side_effect=AssertionError("window must stay open on failure"))
 
     ws = FakePairingWs()
     ws.feed_call("pairLocalApp", {"code": "WRONG"})
@@ -132,6 +148,7 @@ class TestPairingSession(OpenpilotTestCase):
   def test_refuses_non_pairing_rpc_until_paired(self, mocker):
     _reset_module_state(mocker)
     mocker.patch.object(sunnylinkd, "is_locally_paired", return_value=False)
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
 
     ws = FakePairingWs()
     ws.feed_call("getParams", {"params_keys": ["SpeedLimitOffset"], "compression": False})
@@ -141,12 +158,16 @@ class TestPairingSession(OpenpilotTestCase):
 
 
 class DummyDiscovery:
-  def __init__(self, latest=None, seen_ago=None):
+  def __init__(self, latest=None, seen_ago=None, app_id=None):
     self._latest = latest
     self._seen = seen_ago
+    self._app_id = app_id
 
   def latest_endpoint(self):
     return self._latest
+
+  def latest_app_id(self):
+    return self._app_id
 
   def last_seen_ago(self):
     return self._seen
@@ -158,37 +179,89 @@ class TestConnectionSelection(OpenpilotTestCase):
       LocalApp(app_id="a", endpoint="ws://10.0.0.2:8443", app_name="older"),
       LocalApp(app_id="b", endpoint="ws://10.0.0.3:8443", app_name="newer"),
     ]
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
     uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery(), {})
     assert (uri, kind) == ("ws://10.0.0.3:8443", "paired_local")
 
   def test_backoff_skips_local_endpoint(self, mocker):
     apps = [LocalApp(app_id="a", endpoint="ws://10.0.0.2:8443")]
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
     future = time.monotonic() + 9999
     uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery(), {"ws://10.0.0.2:8443": future})
     assert (uri, kind) == (sunnylinkd.SUNNYLINK_ATHENA_HOST, "cloud")
 
-  def test_fresh_beacon_offers_pairing_when_unpaired(self, mocker):
+  def test_armed_window_offers_pairing_to_new_app(self, mocker):
+    """An empty registry + an armed window + a fresh beacon → pairing offer."""
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=[])
-    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.5:8443", 2), {})
+    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.5:8443", 2, "new-app"), {})
     assert (uri, kind) == ("ws://10.0.0.5:8443", "pairing_offer")
 
+  def test_armed_window_offers_pairing_to_new_app_while_paired(self, mocker):
+    """A device already paired to one app can pair ANOTHER during a window."""
+    apps = [LocalApp(app_id="app-a", endpoint="ws://10.0.0.2:8443")]
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
+    mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
+    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.9:8443", 1, "app-b"), {})
+    assert (uri, kind) == ("ws://10.0.0.9:8443", "pairing_offer")
+
+  def test_armed_window_never_dials_paired_app_beacon(self, mocker):
+    """While armed, a beacon from an already-paired app is NOT a pairing
+    offer (paired endpoints are skipped too — the window targets the NEW app,
+    so the loop waits rather than re-dialing the existing app)."""
+    apps = [LocalApp(app_id="app-a", endpoint="ws://10.0.0.2:8443")]
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
+    mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
+    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.2:8443", 1, "app-a"), {})
+    assert (uri, kind) == (sunnylinkd.SUNNYLINK_ATHENA_HOST, "cloud")
+
   def test_stale_beacon_ignored(self, mocker):
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=[])
-    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.5:8443", 9999), {})
+    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.5:8443", 9999, "new-app"), {})
     assert (uri, kind) == (sunnylinkd.SUNNYLINK_ATHENA_HOST, "cloud")
 
   def test_cloud_when_nothing_local(self, mocker):
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=[])
     uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery(None, None), {})
     assert (uri, kind) == (sunnylinkd.SUNNYLINK_ATHENA_HOST, "cloud")
 
-  def test_paired_device_ignores_discovery(self, mocker):
+  def test_paired_device_ignores_discovery_without_window(self, mocker):
     apps = [LocalApp(app_id="a", endpoint="ws://10.0.0.2:8443")]
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
-    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.99:8443", 1), {})
+    uri, kind = sunnylinkd._pick_ws_uri(DummyDiscovery("ws://10.0.0.99:8443", 1, "new-app"), {})
     assert (uri, kind) == ("ws://10.0.0.2:8443", "paired_local")
+
+
+class TestPairingWatchdog(OpenpilotTestCase):
+  def test_closes_connection_and_clears_backoffs_when_armed(self, mocker):
+    """Arming the window mid-session forces re-selection: the live connection
+    is closed and local backoffs cleared so the loop dials the new app."""
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
+    ws = FakePairingWs()
+    backoffs = {"ws://10.0.0.2:8443": time.monotonic() + 9999}
+    stop = threading.Event()
+    sunnylinkd._pairing_watchdog(ws, backoffs, stop, interval_s=0.01)
+    assert ws.closed
+    assert backoffs == {}
+
+  def test_does_nothing_when_not_armed(self, mocker):
+    mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
+    ws = FakePairingWs()
+    backoffs = {"ws://10.0.0.2:8443": 1.0}
+    stop = threading.Event()
+    thread = threading.Thread(target=sunnylinkd._pairing_watchdog,
+                              args=(ws, backoffs, stop), kwargs={"interval_s": 0.01})
+    thread.start()
+    time.sleep(0.05)
+    assert not ws.closed
+    assert backoffs == {"ws://10.0.0.2:8443": 1.0}
+    stop.set()
+    thread.join(timeout=2)
 
 
 class TestServiceable(OpenpilotTestCase):
