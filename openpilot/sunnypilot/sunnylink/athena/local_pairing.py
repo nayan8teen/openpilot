@@ -101,6 +101,27 @@ def add_local_app(app: LocalApp, params: Params | None = None) -> None:
   cloudlog.event("local_pairing.app_paired", app_id=app.app_id, endpoint=app.endpoint)
 
 
+def update_local_app_endpoint(app_id: str, endpoint: str, params: Params | None = None) -> bool:
+  """
+  Refresh a PAIRED app's cached LAN endpoint from its beacon.
+
+  IPs are not identity: the app can move between networks, so the discovery
+  listener re-learns its address from the app's own beacon. The app's
+  app_name/paired_at are preserved; returns True only when the endpoint
+  actually changed (callers can then react — e.g. force a re-selection).
+  """
+  apps = get_local_apps(params)
+  for i, app in enumerate(apps):
+    if app.app_id != app_id or app.endpoint == endpoint:
+      continue
+    apps[i] = LocalApp(app_id=app.app_id, endpoint=endpoint,
+                       app_name=app.app_name, paired_at=app.paired_at)
+    _save_local_apps(apps, params)
+    cloudlog.event("local_pairing.app_endpoint_refreshed", app_id=app_id, endpoint=endpoint)
+    return True
+  return False
+
+
 def remove_local_app(app_id: str, params: Params | None = None) -> bool:
   """Unpair an app by id. Returns True when an app was removed."""
   apps = get_local_apps(params)

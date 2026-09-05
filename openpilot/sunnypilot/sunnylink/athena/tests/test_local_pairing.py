@@ -31,6 +31,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   read_pairing_code,
   remove_all_local_apps,
   remove_local_app,
+  update_local_app_endpoint,
   verify_pairing_code,
 )
 
@@ -142,6 +143,27 @@ class TestLocalAppsRegistry(OpenpilotTestCase):
     apps = get_local_apps(self.params)
     assert [a.app_id for a in apps] == ["b"]
     assert not remove_local_app("missing", self.params)
+
+  def test_update_local_app_endpoint(self):
+    """A paired app's beacon refreshes its cached endpoint (the app's IP can
+    change between networks) without touching identity fields."""
+    add_local_app(self.app(), self.params)
+    assert update_local_app_endpoint("app-1", "ws://10.0.0.99:8443", self.params)
+    apps = get_local_apps(self.params)
+    assert len(apps) == 1
+    assert apps[0].endpoint == "ws://10.0.0.99:8443"
+    assert apps[0].app_name == "Pixel"  # preserved
+    assert apps[0].paired_at > 0        # preserved
+
+  def test_update_local_app_endpoint_no_change_or_unknown(self):
+    add_local_app(self.app(), self.params)
+    # Same endpoint → not a change.
+    assert not update_local_app_endpoint("app-1", "ws://10.0.0.5:8443", self.params)
+    # Unknown app → never creates an entry.
+    assert not update_local_app_endpoint("stranger", "ws://10.0.0.9:8443", self.params)
+    apps = get_local_apps(self.params)
+    assert len(apps) == 1
+    assert apps[0].endpoint == "ws://10.0.0.5:8443"
 
   def test_remove_all(self):
     add_local_app(self.app("a"), self.params)

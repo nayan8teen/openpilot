@@ -35,7 +35,7 @@ from openpilot.sunnypilot.sunnylink.api import SunnylinkApi
 from openpilot.sunnypilot.sunnylink.utils import sunnylink_need_register, sunnylink_ready, get_param_as_byte, save_param_from_base64_encoded_string
 from openpilot.sunnypilot.sunnylink.capabilities import generate_capabilities, CAPABILITY_LABELS
 from openpilot.sunnypilot.sunnylink.tools.generate_settings_schema import generate_schema
-from openpilot.sunnypilot.sunnylink.athena.local_discovery import LOCAL_BEACON_FRESH_S, LocalDiscovery
+from openpilot.sunnypilot.sunnylink.athena.local_discovery import LOCAL_BEACON_FRESH_S, AppBeacon, LocalDiscovery
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   PAIRING_WINDOW_S,
   LocalApp,
@@ -72,6 +72,12 @@ PAIRING_WATCHDOG_INTERVAL_S = 2.0       # cadence for detecting an armed pairing
 # their state to it (an app can only pair with the app endpoint it dialed in
 # on). None when connected to the cloud host.
 _active_local_endpoint: str | None = None
+# The live WebSocket of the current connection (set/cleared by the connection
+# loop), for the paired-app refresh handler to drop so the loop re-selects.
+_active_ws: WebSocket | None = None
+# Set while a pairing session is running: a paired-app beacon refresh must
+# never close the very connection the pairing code is being typed over.
+_pairing_in_progress = threading.Event()
 
 params = Params()
 
@@ -411,7 +417,25 @@ def _pick_ws_uri(discovery: LocalDiscovery, backoffs: dict[str, float]) -> tuple
     # Armed but no (new) app in sight yet: return cloud so the connection
     # loop's pairing gate makes it wait and re-pick instead of dialing.
     return SUNNYLINK_ATHENA_HOST, "cloud"
+  # Paired apps: a FRESH beacon from one of them is the most current truth for
+  # selection — the app's IP can change between networks, and the discovery
+  # listener refreshes the registry from its beacons. Backoffs are keyed by
+  # endpoint string, so a changed IP carries no backoff and is dialed on the
+  # very next cycle.
+  fresh_endpoint = discovery.latest_paired_endpoint()
+  fresh_seen = discovery.latest_paired_seen_ago()
+  fresh_app_id = discovery.latest_paired_app_id()
+  fresh_ok = (fresh_endpoint is not None and fresh_seen is not None
+              and fresh_seen <= LOCAL_BEACON_FRESH_S and fresh_app_id is not None
+              and fresh_app_id in app_ids)
+  if fresh_ok and backoffs.get(fresh_endpoint, 0.0) <= now:
+    return fresh_endpoint, "paired_local"
   for app in reversed(apps):
+    # A fresh beacon SUPERSEDES the app's stored endpoint — the app moved, so
+    # its old address is never dialed; if the fresh one is backoff-blocked,
+    # skip this app entirely this cycle rather than dialing a dead address.
+    if fresh_ok and app.app_id == fresh_app_id:
+      continue
     if backoffs.get(app.endpoint, 0.0) <= now:
       return app.endpoint, "paired_local"
   return SUNNYLINK_ATHENA_HOST, "cloud"
@@ -450,6 +474,43 @@ def _probe_local_apps(active_ws: WebSocket, discovery: LocalDiscovery,
     except Exception:
       pass
     break
+
+
+def _handle_paired_refresh(backoffs: dict[str, float], beacon: AppBeacon) -> None:
+  """
+  A paired app just announced a NEW endpoint (its IP changed — the discovery
+  listener has already refreshed the registry). Clear that app's stale
+  endpoint backoffs, and when the device is not already serving a local app
+  (i.e. it is on the cloud link or idle), drop the active connection so the
+  loop re-selects and dials the fresh address within the next beacon tick
+  (~5s) instead of waiting out the 60s probe cadence.
+
+  Deliberately conservative about churn:
+  - A pairing session in progress is never interrupted (the code is being
+    typed over that connection).
+  - If already connected to the fresh endpoint, nothing to do.
+  - If connected to ANOTHER local app, no forced switch — the natural
+    reconnect cycle re-picks, and selection prefers the fresh beacon anyway.
+  """
+  if not any(app.app_id == beacon.app_id for app in get_local_apps()):
+    return
+  for app in get_local_apps():
+    if app.app_id == beacon.app_id and app.endpoint != beacon.endpoint:
+      backoffs.pop(app.endpoint, None)
+  if _pairing_in_progress.is_set():
+    return
+  if _active_local_endpoint == beacon.endpoint:
+    return
+  if _active_local_endpoint is not None:
+    return
+  ws = _active_ws
+  if ws is not None:
+    cloudlog.event("sunnylinkd.paired_refresh.reconnect",
+                   app_id=beacon.app_id, endpoint=beacon.endpoint)
+    try:
+      ws.close()
+    except Exception:
+      pass
 
 
 def _pairing_watchdog(active_ws: WebSocket, backoffs: dict[str, float],
@@ -519,7 +580,7 @@ def _connection_loop(exit_event: threading.Event | None, discovery: LocalDiscove
   Unpaired devices dial a freshly-discovered app to run the pairing session.
   Registration only blocks when nothing local is around to pair with.
   """
-  global _active_local_endpoint
+  global _active_local_endpoint, _active_ws
 
   UploadQueueCache.initialize(upload_queue)
   update_car_list_param()
@@ -527,6 +588,9 @@ def _connection_loop(exit_event: threading.Event | None, discovery: LocalDiscove
   conn_start = None
   conn_retries = 0
   backoffs: dict[str, float] = {}
+  # A paired app's beacon can announce a NEW endpoint at any time (its IP
+  # changed) — force a prompt re-selection to the fresh address.
+  discovery.paired_refresh_cb = partial(_handle_paired_refresh, backoffs)
 
   while (exit_event is None or not exit_event.is_set()) and _serviceable(params):
     ws_uri, kind = _pick_ws_uri(discovery, backoffs)
@@ -573,6 +637,7 @@ def _connection_loop(exit_event: threading.Event | None, discovery: LocalDiscove
     conn_start = None
     conn_retries = 0
     cur_upload_items.clear()
+    _active_ws = ws
 
     probe_stop: threading.Event | None = None
     watch_stop: threading.Event | None = None
@@ -580,7 +645,12 @@ def _connection_loop(exit_event: threading.Event | None, discovery: LocalDiscove
     try:
       if kind == "pairing_offer":
         _active_local_endpoint = ws_uri
-        if not _pairing_session(ws):
+        _pairing_in_progress.set()
+        try:
+          paired_ok = _pairing_session(ws)
+        finally:
+          _pairing_in_progress.clear()
+        if not paired_ok:
           # User never completed pairing (window expired or dial failed) — go
           # away so we don't thrash the app, then fall back to the normal
           # selection (paired local endpoints / cloud) on the next cycle.
@@ -632,6 +702,8 @@ def _connection_loop(exit_event: threading.Event | None, discovery: LocalDiscove
         backoffs.pop(session_endpoint, None)
       if _active_local_endpoint == session_endpoint:
         _active_local_endpoint = None
+      if _active_ws is ws:
+        _active_ws = None
 
     time.sleep(backoff(conn_retries))
 

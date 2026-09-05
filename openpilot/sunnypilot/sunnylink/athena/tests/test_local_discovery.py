@@ -26,6 +26,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   add_local_app,
   arm_pairing,
   clear_pairing_request,
+  get_local_apps,
 )
 
 # Params keys these tests write (restored in teardown).
@@ -159,6 +160,106 @@ class TestLocalDiscovery(OpenpilotTestCase):
       sender.sendto(beacon("app-2", 8443), addr)
       assert self._wait_for_endpoint(discovery, "ws://127.0.0.1:8443")
       assert discovery.latest_app_id() == "app-2"
+    finally:
+      discovery.stop()
+      discovery.join(timeout=2)
+      sender.close()
+
+  def test_paired_beacon_refreshes_registry_outside_window(self):
+    """A beacon from an ALREADY-PAIRED app updates its cached endpoint even
+    without a pairing window — the app's IP can change between networks, and
+    the registry must follow it (identity is the app_id, not the address)."""
+    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443",
+                           app_name="Pixel"), self.params)
+    listener, sender, addr = self._make_pair()
+    discovery = LocalDiscovery(self.params, sock=listener)
+    discovery.start()
+    try:
+      sender.sendto(beacon("app-1"), addr)
+      deadline = time.monotonic() + 3
+      while time.monotonic() < deadline:
+        apps = get_local_apps(self.params)
+        if apps and apps[0].endpoint == "ws://127.0.0.1:8443":
+          break
+        time.sleep(0.02)
+      apps = get_local_apps(self.params)
+      assert len(apps) == 1
+      assert apps[0].endpoint == "ws://127.0.0.1:8443"
+      assert apps[0].app_name == "Pixel"  # identity fields preserved
+      assert apps[0].paired_at > 0
+      # The in-memory paired-beacon state is exposed for connection selection.
+      assert discovery.latest_paired_endpoint() == "ws://127.0.0.1:8443"
+      assert discovery.latest_paired_app_id() == "app-1"
+      assert discovery.latest_paired_seen_ago() is not None
+    finally:
+      discovery.stop()
+      discovery.join(timeout=2)
+      sender.close()
+
+  def test_unknown_beacon_outside_window_does_not_touch_registry(self):
+    """Beacons from unknown apps are still ignored outside a window — only
+    already-paired apps are re-learned."""
+    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
+    listener, sender, addr = self._make_pair()
+    discovery = LocalDiscovery(self.params, sock=listener)
+    discovery.start()
+    try:
+      sender.sendto(beacon("stranger"), addr)
+      time.sleep(0.3)
+      apps = get_local_apps(self.params)
+      assert [a.app_id for a in apps] == ["app-1"]
+      assert apps[0].endpoint == "ws://10.0.0.5:8443"
+      assert discovery.latest_paired_endpoint() is None
+    finally:
+      discovery.stop()
+      discovery.join(timeout=2)
+      sender.close()
+
+  def test_paired_refresh_callback_fires_only_on_change(self):
+    """The daemon is notified only when a paired app's endpoint actually
+    changes — repeated beacons from the same address must not churn anything."""
+    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
+    calls: list[str] = []
+    listener, sender, addr = self._make_pair()
+    discovery = LocalDiscovery(self.params, sock=listener,
+                               paired_refresh_cb=lambda b: calls.append(b.endpoint))
+    discovery.start()
+    try:
+      sender.sendto(beacon("app-1"), addr)
+      deadline = time.monotonic() + 3
+      while time.monotonic() < deadline:
+        apps = get_local_apps(self.params)
+        if apps and apps[0].endpoint == "ws://127.0.0.1:8443":
+          break
+        time.sleep(0.02)
+      time.sleep(0.1)
+      sender.sendto(beacon("app-1"), addr)  # same address — not a change
+      time.sleep(0.2)
+      assert calls == ["ws://127.0.0.1:8443"]
+    finally:
+      discovery.stop()
+      discovery.join(timeout=2)
+      sender.close()
+
+  def test_paired_refresh_also_runs_while_window_armed(self):
+    """Paired-app endpoint refresh is orthogonal to the pairing window: an
+    armed window (pairing a NEW app) does not stop a paired app's beacon from
+    refreshing its address."""
+    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
+    arm_pairing(self.params)
+    listener, sender, addr = self._make_pair()
+    discovery = LocalDiscovery(self.params, sock=listener)
+    discovery.start()
+    try:
+      sender.sendto(beacon("app-1"), addr)
+      deadline = time.monotonic() + 3
+      while time.monotonic() < deadline:
+        apps = get_local_apps(self.params)
+        if apps and apps[0].endpoint == "ws://127.0.0.1:8443":
+          break
+        time.sleep(0.02)
+      apps = get_local_apps(self.params)
+      assert apps[0].endpoint == "ws://127.0.0.1:8443"
     finally:
       discovery.stop()
       discovery.join(timeout=2)
