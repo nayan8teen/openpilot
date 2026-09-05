@@ -228,6 +228,12 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SunnylinkEnabled", {PERSISTENT, BOOL, "1"}},
     {"SunnylinkTempFault", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL, "0"}},
 
+    // Local (LAN) mode params — the sunnylink mobile app acts as the backend on the LAN.
+    // SunnylinkLocalApps: JSON list of paired apps [{app_id, app_name, endpoint, paired_at}].
+    {"SunnylinkLocalApps", {PERSISTENT, STRING}},
+    // SunnylinkLocalPairingCode: rotating 6-char code shown on the device screen for pairing.
+    {"SunnylinkLocalPairingCode", {CLEAR_ON_MANAGER_START, STRING}},
+
     // Backup Manager params
     {"BackupManager_CreateBackup", {PERSISTENT, BOOL}},
     {"BackupManager_RestoreVersion", {PERSISTENT, STRING}},
