@@ -8,7 +8,7 @@ import json
 import socket
 import time
 
-from openpilot.common.params import Params
+from openpilot.common.params import Params, params_put
 from openpilot.common.test import OpenpilotTestCase
 
 from openpilot.sunnypilot.sunnylink.athena.local_discovery import (
@@ -114,9 +114,8 @@ class TestLocalDiscovery(OpenpilotTestCase):
     try:
       sender.sendto(beacon("app-9", 9000), addr)
       assert self._wait_for_endpoint(discovery, "ws://127.0.0.1:9000")
-      raw = self._wait_for_param(DISCOVERED_APP_KEY)
-      assert raw, "discovered-app status never written"
-      data = json.loads(raw)
+      data = self._wait_for_param(DISCOVERED_APP_KEY)
+      assert data, "discovered-app status never written"
       assert data["endpoint"] == "ws://127.0.0.1:9000"
       assert data["app_id"] == "app-9"
       assert abs(int(data["ts"]) - int(time.time())) < 5  # noqa: TID251 -- wall-clock ts
@@ -143,8 +142,8 @@ class TestLocalDiscovery(OpenpilotTestCase):
     """Once paired, beacons are ignored AND any stale discovered status is dropped."""
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
     self.params.put(DISCOVERED_APP_KEY,
-                    json.dumps({"endpoint": "ws://10.0.0.9:8443", "app_id": "old",
-                                "ts": int(time.time())}),  # noqa: TID251 -- wall-clock ts
+                    {"endpoint": "ws://10.0.0.9:8443", "app_id": "old",
+                     "ts": int(time.time())},  # noqa: TID251 -- wall-clock ts
                     block=True)
     listener, sender, addr = self._make_pair()
     discovery = LocalDiscovery(self.params, sock=listener)
@@ -187,7 +186,7 @@ class TestLatestDiscoveredApp(OpenpilotTestCase):
 
   def _put(self, ts):
     self.params.put(DISCOVERED_APP_KEY,
-                    json.dumps({"endpoint": "ws://192.168.1.50:8443", "app_id": "app-1", "ts": ts}),
+                    {"endpoint": "ws://192.168.1.50:8443", "app_id": "app-1", "ts": ts},
                     block=True)
 
   def test_none_when_empty(self):
@@ -206,5 +205,10 @@ class TestLatestDiscoveredApp(OpenpilotTestCase):
     assert latest_discovered_app(self.params) is None
 
   def test_corrupt_status(self):
-    self.params.put(DISCOVERED_APP_KEY, "not-json{", block=True)
+    # Legacy STRING-era value (raw JSON text) or external corruption.
+    params_put(self.params.p, b"SunnylinkLocalDiscoveredApp", b"not-json{", len(b"not-json{"), True)
+    assert latest_discovered_app(self.params) is None
+
+  def test_wrong_shape_status(self):
+    self.params.put(DISCOVERED_APP_KEY, ["not", "a", "dict"], block=True)
     assert latest_discovered_app(self.params) is None

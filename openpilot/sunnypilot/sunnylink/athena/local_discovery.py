@@ -164,13 +164,13 @@ class LocalDiscovery(threading.Thread):
     self._last_written_endpoint = beacon.endpoint
     self._last_written_app_id = beacon.app_id
     self._discovered_cleared = False
-    payload = json.dumps({
+    payload = {
       "endpoint": beacon.endpoint,
       "app_id": beacon.app_id,
       # Wall-clock epoch is intentional — this param is read by the settings UI
       # in another process, so a monotonic (process-local) clock won't do.
       "ts": int(time.time()),  # noqa: TID251
-    }, separators=(",", ":"))
+    }
     try:
       # block=True: the settings UI (another process) must see this promptly.
       # Writes are throttled to every [write_interval_s] at most, so this is
@@ -221,12 +221,11 @@ def latest_discovered_app(params: Params | None = None,
   touching the UDP socket; pairing state is the caller's concern.
   """
   params = params or Params()
-  raw = params.get(DISCOVERED_APP_KEY)
-  if not raw:
+  data = params.get(DISCOVERED_APP_KEY)
+  if not isinstance(data, dict):
     return None
+  endpoint = str(data.get("endpoint", ""))
   try:
-    data = json.loads(raw)
-    endpoint = str(data.get("endpoint", ""))
     ts = int(data.get("ts") or 0)
   except (ValueError, TypeError):
     return None

@@ -6,7 +6,6 @@ See the LICENSE.md file in the root directory for more details.
 """
 from __future__ import annotations
 
-import json
 import secrets
 import threading
 from dataclasses import asdict, dataclass
@@ -64,25 +63,18 @@ def is_locally_paired(params: Params | None = None) -> bool:
 
 
 def get_local_apps(params: Params | None = None) -> list[LocalApp]:
-  """The paired-app registry (persisted in `SunnylinkLocalApps`)."""
+  """The paired-app registry (a JSON list persisted in `SunnylinkLocalApps`)."""
   params = params or Params()
-  raw = params.get(LOCAL_APPS_KEY)
-  if not raw:
+  data = params.get(LOCAL_APPS_KEY)
+  if not isinstance(data, list):
     return []
-  try:
-    data = json.loads(raw)
-    if not isinstance(data, list):
-      return []
-    return [LocalApp.from_dict(item) for item in data if isinstance(item, dict) and item.get("app_id")]
-  except (ValueError, TypeError):
-    cloudlog.warning("local_pairing.get_local_apps.invalid_json")
-    return []
+  return [LocalApp.from_dict(item) for item in data if isinstance(item, dict) and item.get("app_id")]
 
 
 def _save_local_apps(apps: list[LocalApp], params: Params | None = None) -> None:
   params = params or Params()
   if apps:
-    params.put(LOCAL_APPS_KEY, json.dumps([asdict(app) for app in apps], separators=(",", ":")), block=True)
+    params.put(LOCAL_APPS_KEY, [asdict(app) for app in apps], block=True)
   else:
     params.remove(LOCAL_APPS_KEY)
 
@@ -118,20 +110,30 @@ def generate_pairing_code() -> str:
   return "".join(secrets.choice(PAIRING_CODE_ALPHABET) for _ in range(PAIRING_CODE_LENGTH))
 
 
+def read_pairing_code(params: Params | None = None) -> str | None:
+  """The stored pairing code, or None when cleared / not yet generated."""
+  params = params or Params()
+  data = params.get(PAIRING_CODE_KEY)
+  if not isinstance(data, dict):
+    return None
+  code = data.get("code")
+  return str(code) if code else None
+
+
 def get_pairing_code(params: Params | None = None) -> str:
   """The current displayed pairing code, generating one on first use."""
   params = params or Params()
-  code = params.get(PAIRING_CODE_KEY)
-  if code is None or len(code) != PAIRING_CODE_LENGTH:
+  code = read_pairing_code(params)
+  if code is None:
     code = generate_pairing_code()
-    params.put(PAIRING_CODE_KEY, code, block=True)
+    params.put(PAIRING_CODE_KEY, {"code": code}, block=True)
   return code
 
 
 def verify_pairing_code(code: str, params: Params | None = None) -> bool:
   """Constant-time check of a code typed into the app against the displayed one."""
   params = params or Params()
-  current = params.get(PAIRING_CODE_KEY)
+  current = read_pairing_code(params)
   if current is None:
     return False
   return secrets.compare_digest(str(code).strip().upper(), current)
@@ -163,7 +165,7 @@ class PairingCodeRotator(threading.Thread):
     if is_locally_paired(self.params):
       self.params.remove(PAIRING_CODE_KEY)
     else:
-      self.params.put(PAIRING_CODE_KEY, generate_pairing_code(), block=True)
+      self.params.put(PAIRING_CODE_KEY, {"code": generate_pairing_code()}, block=True)
 
   def run(self) -> None:
     self.rotate()

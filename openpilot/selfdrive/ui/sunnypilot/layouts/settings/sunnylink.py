@@ -13,10 +13,10 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.sunnypilot.sunnylink.api import UNREGISTERED_SUNNYLINK_DONGLE_ID
 from openpilot.sunnypilot.sunnylink.athena.local_discovery import latest_discovered_app
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
-  PAIRING_CODE_KEY,
   LocalApp,
   get_local_apps,
   is_locally_paired,
+  read_pairing_code,
   remove_local_app,
 )
 from openpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
@@ -446,7 +446,7 @@ class SunnylinkLayout(Widget):
       self._local_discovered_text.set_text(tr("Not discovered"))
       self._local_discovered_text.color = _LOCAL_DISCOVERED_COLOR
 
-    code = ui_state.params.get(PAIRING_CODE_KEY)
+    code = read_pairing_code()
     self._pairing_code_text.set_text(code or "—")
 
   def _unpair_local_app(self, index: int):

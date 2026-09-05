@@ -7,7 +7,7 @@ See the LICENSE.md file in the root directory for more details.
 import threading
 import time
 
-from openpilot.common.params import Params
+from openpilot.common.params import Params, params_put
 from openpilot.common.test import OpenpilotTestCase
 
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
@@ -23,10 +23,17 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   get_pairing_code,
   is_locally_paired,
   local_identity,
+  read_pairing_code,
   remove_all_local_apps,
   remove_local_app,
   verify_pairing_code,
 )
+
+
+def _put_raw(params: Params, key: str, value: bytes) -> None:
+  """Write raw bytes under a key, bypassing the Python JSON cast (simulates
+  legacy STRING-era values or external corruption)."""
+  params_put(params.p, key.encode(), value, len(value), True)
 
 # Params keys these tests write (restored in teardown).
 _WRITTEN_KEYS = (LOCAL_APPS_KEY, PAIRING_CODE_KEY, "DongleId", "HardwareSerial")
@@ -54,9 +61,16 @@ class TestPairingCode(OpenpilotTestCase):
     self.params.remove(PAIRING_CODE_KEY)
     code = get_pairing_code(self.params)
     assert len(code) == PAIRING_CODE_LENGTH
-    assert self.params.get(PAIRING_CODE_KEY) == code
+    assert self.params.get(PAIRING_CODE_KEY) == {"code": code}
+    assert read_pairing_code(self.params) == code
     # Stable across reads until rotated.
     assert get_pairing_code(self.params) == code
+
+  def test_read_pairing_code_handles_missing_and_wrong_shape(self):
+    self.params.remove(PAIRING_CODE_KEY)
+    assert read_pairing_code(self.params) is None
+    self.params.put(PAIRING_CODE_KEY, {"not_code": 1}, block=True)
+    assert read_pairing_code(self.params) is None
 
   def test_verify_pairing_code(self):
     code = get_pairing_code(self.params)
@@ -128,7 +142,14 @@ class TestLocalAppsRegistry(OpenpilotTestCase):
     assert not is_locally_paired(self.params)
 
   def test_ignores_corrupt_registry(self):
-    self.params.put(LOCAL_APPS_KEY, "not-json{", block=True)
+    # Legacy STRING-era value (raw JSON text, not a JSON document) or external
+    # corruption — must not crash, treated as unpaired.
+    _put_raw(self.params, LOCAL_APPS_KEY, b"not-json{")
+    assert get_local_apps(self.params) == []
+    assert not is_locally_paired(self.params)
+
+  def test_ignores_non_list_registry(self):
+    self.params.put(LOCAL_APPS_KEY, {"not": "a list"}, block=True)
     assert get_local_apps(self.params) == []
     assert not is_locally_paired(self.params)
 
@@ -149,8 +170,9 @@ class TestPairingCodeRotator(OpenpilotTestCase):
     self.params.remove(PAIRING_CODE_KEY)
     rotator = PairingCodeRotator(self.params)
     rotator.rotate()
-    code = self.params.get(PAIRING_CODE_KEY)
-    assert code is not None and len(code) == PAIRING_CODE_LENGTH
+    assert self.params.get(PAIRING_CODE_KEY) == {"code": read_pairing_code(self.params)}
+    assert read_pairing_code(self.params) is not None
+    assert len(read_pairing_code(self.params)) == PAIRING_CODE_LENGTH
 
   def test_rotate_clears_code_while_paired(self):
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
@@ -169,7 +191,7 @@ class TestPairingCodeRotator(OpenpilotTestCase):
       deadline = time.monotonic() + 3
       seen: set[str] = set()
       while time.monotonic() < deadline:
-        code = self.params.get(PAIRING_CODE_KEY)
+        code = read_pairing_code(self.params)
         if code is not None:
           seen.add(code)
           first = first or code
