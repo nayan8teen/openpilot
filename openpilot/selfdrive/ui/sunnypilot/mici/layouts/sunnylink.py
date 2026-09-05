@@ -10,7 +10,7 @@ from functools import partial
 from openpilot.cereal import custom
 from openpilot.common.version import sunnylink_consent_version, sunnylink_consent_declined
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigToggle
-from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigConfirmationDialog
+from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigConfirmationDialog, BigDialogBase
 from openpilot.selfdrive.ui.sunnypilot.mici.layouts.onboarding import SunnylinkConsentPage
 from openpilot.selfdrive.ui.sunnypilot.mici.widgets.sunnylink_pairing_dialog import SunnylinkPairingDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -31,8 +31,8 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets.scroller import NavScroller
 
-# Max paired-app rows rendered in the settings list (the registry itself is
-# unbounded — more apps keep working, just not listed).
+# Max paired-app rows rendered in the local-app sub-panel (the registry itself
+# is unbounded — more apps keep working, just not listed).
 MAX_LOCAL_APPS = 4
 
 class SunnylinkInfo(Widget):
@@ -87,38 +87,18 @@ class SunnylinkLayoutMici(NavScroller):
     self._sunnylink_uploader_toggle = BigToggle(text=tr("sunnylink uploader"), initial_state=False,
                                                 toggle_callback=self._sunnylink_uploader_callback)
 
-    # Local (LAN) mode rows — the sunnylink mobile app acts as the backend on
-    # this network. Pairing is an explicit device-side action: the "Pair App"
-    # button arms a 5-minute window (discovery + the code to type into the
-    # app). These mirror what the device sees: an app offering pairing + the
-    # code to type into it (while a window is armed), or the apps currently
-    # paired, each with an unpair action.
-    self._local_apps_cache: list[LocalApp] = []
-    self._local_discovered: tuple[str, int] | None = None
-
-    self._pair_app_btn = BigButton(tr("pair app"), "")
-    self._pair_app_btn.set_click_callback(lambda: arm_pairing())
-
-    self._local_discovered_btn = BigButton(tr("local app"), tr("not discovered"))
-    self._local_discovered_btn.set_touch_valid_callback(lambda: False)
-    self._pairing_code_btn = BigButton(tr("pairing code"), "—")
-    self._pairing_code_btn.set_touch_valid_callback(lambda: False)
-
-    self._local_app_btns: list[BigButton] = []
-    for i in range(MAX_LOCAL_APPS):
-      btn = BigButton("", "")
-      btn.set_click_callback(partial(self._confirm_unpair_local_app, i))
-      self._local_app_btns.append(btn)
+    # Local (LAN) mode — all management lives behind the "mobile app" button,
+    # which opens a sub-panel: "pair app" there arms a 5-minute window and
+    # shows the code in a dialog; paired apps are listed with unpair actions.
+    self._mobile_app_btn = BigButton(tr("mobile app"), "")
+    self._mobile_app_btn.set_click_callback(lambda: gui_app.push_widget(LocalAppsPanelMici()))
 
     self._scroller.add_widgets([
       self._sunnylink_info,
       self._sunnylink_toggle,
       self._sunnylink_sponsor_button,
       self._sunnylink_pair_button,
-      self._pair_app_btn,
-      self._local_discovered_btn,
-      self._pairing_code_btn,
-      *self._local_app_btns,
+      self._mobile_app_btn,
       self._backup_btn,
       self._restore_btn,
       self._sunnylink_uploader_toggle
@@ -151,58 +131,7 @@ class SunnylinkLayoutMici(NavScroller):
       self._sunnylink_pair_button.set_text(tr("paired"))
     else:
       self._sunnylink_pair_button.set_text(tr("pair"))
-    self._pair_app_btn.set_visible(self._sunnylink_enabled and not pairing_requested())
-    self._refresh_local_rows()
-
-  # --- Local (LAN) mode helpers ----------------------------------------------
-
-  def _refresh_local_rows(self):
-    """Per-frame refresh of the local-mode rows (cheap param reads)."""
-    self._local_apps_cache = get_local_apps()
-    self._local_discovered = latest_discovered_app()
-    paired = bool(self._local_apps_cache)
-
-    # Discovery + pairing-code rows: shown while sunnylink is on and a pairing
-    # window is armed (the "Pair App" button was pressed). The code is
-    # generated at arm time and self-expires with the window, so it stays
-    # readable even while no app beacon is in sight; the discovery button
-    # reads "not discovered" until the phone announces itself.
-    show_unpaired = self._sunnylink_enabled and pairing_requested()
-    self._local_discovered_btn.set_visible(show_unpaired)
-    self._pairing_code_btn.set_visible(show_unpaired)
-
-    for i, btn in enumerate(self._local_app_btns):
-      btn.set_visible(self._sunnylink_enabled and paired and i < len(self._local_apps_cache))
-
-    if self._local_discovered is not None:
-      endpoint, age = self._local_discovered
-      self._local_discovered_btn.set_value(endpoint if age < 2 else f"{endpoint} ({age}s)")
-    else:
-      self._local_discovered_btn.set_value(tr("not discovered"))
-
-    code = read_pairing_code()
-    self._pairing_code_btn.set_value(code or "—")
-
-    for i, btn in enumerate(self._local_app_btns):
-      if i < len(self._local_apps_cache):
-        app = self._local_apps_cache[i]
-        btn.set_text(app.app_name or app.app_id)
-        btn.set_value(app.endpoint)
-
-  def _confirm_unpair_local_app(self, index: int):
-    apps = self._local_apps_cache
-    if index >= len(apps):
-      return
-    app = apps[index]
-    name = app.app_name or app.app_id
-    icon = gui_app.texture("icons_mici/settings/device/update.png", 64, 64)
-    dlg = BigConfirmationDialog(
-      tr("slide to unpair") + f" {name}",
-      icon,
-      confirm_callback=lambda: remove_local_app(app.app_id),
-      red=True,
-    )
-    gui_app.push_widget(dlg)
+    self._mobile_app_btn.set_visible(self._sunnylink_enabled)
 
   def show_event(self):
     super().show_event()
@@ -347,3 +276,117 @@ class SunnylinkPairBigButton(BigButton):
       dlg = SunnylinkPairingDialog(sponsor_pairing=False)
     if dlg:
       gui_app.push_widget(dlg)
+
+
+class LocalAppsPanelMici(NavScroller):
+  """Sub-panel reached from the "mobile app" button: pair a new app or unpair
+  existing ones. Pushed on the nav stack (swipe down to go back); the paired
+  buttons refresh every frame so a freshly-paired app appears immediately."""
+
+  def __init__(self):
+    super().__init__()
+    self._local_apps_cache: list[LocalApp] = []
+
+    self._pair_app_btn = BigButton(tr("pair app"), "")
+    self._pair_app_btn.set_click_callback(lambda: gui_app.push_widget(LocalPairingCodeDialogMici()))
+
+    self._local_app_btns: list[BigButton] = []
+    for i in range(MAX_LOCAL_APPS):
+      btn = BigButton("", "")
+      btn.set_click_callback(partial(self._confirm_unpair_local_app, i))
+      self._local_app_btns.append(btn)
+
+    self._scroller.add_widgets([self._pair_app_btn, *self._local_app_btns])
+
+  def _update_state(self):
+    super()._update_state()
+    self._local_apps_cache = get_local_apps()
+    for i, btn in enumerate(self._local_app_btns):
+      btn.set_visible(i < len(self._local_apps_cache))
+      if i < len(self._local_apps_cache):
+        app = self._local_apps_cache[i]
+        btn.set_text(app.app_name or app.app_id)
+        btn.set_value(app.endpoint)
+
+  def _confirm_unpair_local_app(self, index: int):
+    apps = self._local_apps_cache
+    if index >= len(apps):
+      return
+    app = apps[index]
+    name = app.app_name or app.app_id
+    icon = gui_app.texture("icons_mici/settings/device/update.png", 64, 64)
+    dlg = BigConfirmationDialog(
+      tr("slide to unpair") + f" {name}",
+      icon,
+      confirm_callback=lambda: remove_local_app(app.app_id),
+      red=True,
+    )
+    gui_app.push_widget(dlg)
+
+
+class LocalPairingCodeDialogMici(BigDialogBase):
+  """Full-screen dialog showing the 6-digit pairing code.
+
+  Opening it arms the pairing window (fresh code, ~5 min). Swiping it away
+  cancels pairing (clears the window). When the app completes pairing, the
+  window is already closed by pairLocalApp and the dialog dismisses itself so
+  the new paired device shows in the sub-panel list.
+  """
+
+  def __init__(self):
+    super().__init__()
+    self._apps_before = len(get_local_apps())
+    arm_pairing()
+    self.set_back_callback(clear_pairing_request)
+
+    header_color = rl.Color(255, 255, 255, int(255 * 0.9))
+    subheader_color = rl.Color(255, 255, 255, int(255 * 0.9 * 0.65))
+    self._title = UnifiedLabel(tr("pair with mobile app"), font_size=48, font_weight=FontWeight.BOLD,
+                               text_color=header_color, line_height=0.8)
+    self._code_label = UnifiedLabel("", font_size=110, font_weight=FontWeight.DISPLAY,
+                                    text_color=rl.Color(0, 255, 0, 255))
+    self._hint = UnifiedLabel(tr("enter this code in the sunnylink app"), font_size=32,
+                              text_color=subheader_color, line_height=0.9)
+    self._status = UnifiedLabel("", font_size=28,
+                                text_color=rl.Color(255, 255, 255, int(255 * 0.45)), line_height=0.9)
+
+  def _update_state(self):
+    super()._update_state()
+    if self.is_dismissing:
+      return
+    if len(get_local_apps()) > self._apps_before:
+      # Paired — the window was already cleared by pairLocalApp. Just close.
+      self.dismiss()
+    elif not pairing_requested():
+      # Window expired (~5 min) without pairing — close (nothing to cancel).
+      self.dismiss()
+
+  def _render(self, _):
+    self._code_label.set_text(read_pairing_code() or "—")
+
+    discovered = latest_discovered_app()
+    if discovered is not None:
+      endpoint, age = discovered
+      self._status.set_text(endpoint if age < 2 else f"{endpoint} ({age}s)")
+      self._status.set_text_color(rl.Color(0, 255, 0, 255))
+    else:
+      self._status.set_text(tr("waiting for the app…"))
+      self._status.set_text_color(rl.Color(255, 255, 255, int(255 * 0.45)))
+
+    x = self._rect.x + 20
+    width = int(self._rect.width - 40)
+    self._title.set_max_width(width)
+    self._title.set_position(x, self._rect.y + 40)
+    self._title.render()
+
+    self._code_label.set_max_width(width)
+    self._code_label.set_position(x, self._rect.y + 130)
+    self._code_label.render()
+
+    self._hint.set_max_width(width)
+    self._hint.set_position(x, self._rect.y + 290)
+    self._hint.render()
+
+    self._status.set_max_width(width)
+    self._status.set_position(x, self._rect.y + 360)
+    self._status.render()

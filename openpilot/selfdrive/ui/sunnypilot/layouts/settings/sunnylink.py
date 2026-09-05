@@ -17,24 +17,26 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   arm_pairing,
   clear_pairing_request,
   get_local_apps,
-  is_locally_paired,
   pairing_requested,
   read_pairing_code,
   remove_local_app,
 )
 from openpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
 from openpilot.system.ui.lib.multilang import tr
+from openpilot.system.ui.lib.text_measure import measure_text_cached
+from openpilot.system.ui.lib.wrap_text import wrap_text
 from openpilot.system.ui.sunnypilot.widgets.list_view import ListItemSP, button_item_sp, toggle_item_sp
 from openpilot.system.ui.sunnypilot.widgets.sunnylink_pairing_dialog import SunnylinkPairingDialog
 from openpilot.system.ui.widgets import Widget, DialogResult
-from openpilot.system.ui.widgets.button import ButtonStyle, Button
+from openpilot.system.ui.widgets.button import ButtonStyle, Button, IconButton
 from openpilot.system.ui.widgets.confirm_dialog import alert_dialog, ConfirmDialog
 from openpilot.system.ui.widgets.label import UnifiedLabel
-from openpilot.system.ui.widgets.list_view import TextAction, dual_button_item
+from openpilot.system.ui.widgets.list_view import dual_button_item
+from openpilot.system.ui.widgets.network import NavButton
 from openpilot.system.ui.widgets.scroller_tici import Scroller, LineSeparator
 
-# Max paired-app rows rendered in the settings list (the registry itself is
-# unbounded — more apps keep working, just not listed). One row per paired app.
+# Max paired-app rows rendered in the local-app sub-panel (the registry itself
+# is unbounded — more apps keep working, just not listed). One row per app.
 MAX_LOCAL_APPS = 4
 
 # Read-only value colors used by the local-mode rows.
@@ -211,51 +213,20 @@ class SunnylinkLayout(Widget):
     self._backup_btn.set_button_style(ButtonStyle.NORMAL)
     self._restore_btn.set_button_style(ButtonStyle.PRIMARY)
 
-    # --- Local (LAN) mode rows -----------------------------------------------
-    # Pairing is an explicit device-side action: the "Pair App" button arms a
-    # 5-minute window (discovery + the code to type into the app). While the
-    # window is armed: "app discovered" + the pairing code rows show. While
-    # apps are paired: one row per paired app with an UNPAIR button. Contents
-    # and visibility (row + its separator) refresh every frame in
-    # _update_state, so hidden rows leave no stray divider lines behind.
-    self._local_apps_cache: list[LocalApp] = []
-    self._local_discovered: tuple[str, int] | None = None  # (endpoint, age_s)
-
-    self._pair_app_btn = button_item_sp(
-      title=tr("Pair App"),
-      button_text=tr("PAIR"),
-      description=tr("Connect a mobile app over Wi-Fi. Starts a 5-minute pairing window: ") +
-                  tr("type the code below into the app to complete pairing."),
-      callback=self._arm_pairing,
+    # --- Local (LAN) mode ------------------------------------------------
+    # All local-mode management lives behind the "Mobile App" row, which opens
+    # a sub-panel (SunnylinkLocalAppLayout): "Pair App" there arms a 5-minute
+    # pairing window and shows the code in a dialog; paired apps are listed
+    # with an UNPAIR button. The main list stays clean — one row, no codes,
+    # no per-app rows.
+    self._mobile_app_btn = button_item_sp(
+      title=tr("Mobile App"),
+      button_text=tr("OPEN"),
+      description=tr("Manage the mobile app(s) connected over Wi-Fi: pair a new app ") +
+                  tr("or unpair existing ones."),
+      callback=self._open_local_apps,
     )
-    self._pair_app_btn.set_visible(lambda: self._pair_app_btn_visible())
-
-    self._local_discovered_text = TextAction(tr("Not discovered"), color=_LOCAL_DISCOVERED_COLOR)
-    self._local_discovered_row = ListItemSP(title=tr("Local app"), action_item=self._local_discovered_text)
-    self._local_discovered_sep = LineSeparator()
-
-    self._pairing_code_text = TextAction("", color=_LOCAL_ACTIVE_COLOR)
-    self._pairing_code_row = ListItemSP(title=tr("Pairing code"), action_item=self._pairing_code_text)
-    self._pairing_code_sep = LineSeparator()
-
-    for w in (self._local_discovered_row, self._local_discovered_sep,
-              self._pairing_code_row, self._pairing_code_sep):
-      w.set_visible(lambda: self._pairing_rows_visible())
-
-    self._local_app_rows: list[ListItemSP] = []
-    self._local_app_seps: list[LineSeparator] = []
-    for i in range(MAX_LOCAL_APPS):
-      row = button_item_sp(
-        title=lambda i=i: self._local_app_title(i),
-        button_text=tr("UNPAIR"),
-        description=lambda i=i: self._local_app_endpoint(i),
-        callback=partial(self._unpair_local_app, i),
-      )
-      sep = LineSeparator()
-      row.set_visible(lambda i=i: self._paired_local_row_visible(i))
-      sep.set_visible(lambda i=i: self._paired_local_row_visible(i))
-      self._local_app_rows.append(row)
-      self._local_app_seps.append(sep)
+    self._mobile_app_btn.set_visible(lambda: self._sunnylink_enabled)
 
     items = [
       SunnylinkHeader(),
@@ -267,20 +238,12 @@ class SunnylinkLayout(Widget):
       LineSeparator(),
       self._pair_btn,
       LineSeparator(),
-      self._pair_app_btn,
+      self._mobile_app_btn,
       LineSeparator(),
-      self._local_discovered_row,
-      self._local_discovered_sep,
-      self._pairing_code_row,
-      self._pairing_code_sep,
-    ]
-    for row, sep in zip(self._local_app_rows, self._local_app_seps, strict=True):
-      items.extend((row, sep))
-    items.extend((
       self._sunnylink_uploader_toggle,
       LineSeparator(),
       self._sunnylink_backup_restore_buttons,
-    ))
+    ]
     return items
 
   @staticmethod
@@ -428,29 +391,67 @@ class SunnylinkLayout(Widget):
     pair_btn_text = tr("Paired") if ui_state.sunnylink_state.is_paired() else tr("Not Paired")
     self._pair_btn.action_item.set_text(pair_btn_text)
     self._pair_btn.action_item.set_enabled(self._sunnylink_enabled)
-    self._refresh_local_rows()
 
-  # --- Local (LAN) mode helpers ----------------------------------------------
+  def _open_local_apps(self):
+    gui_app.push_widget(SunnylinkLocalAppLayout())
 
-  def _pair_app_btn_visible(self) -> bool:
-    """The Pair App button shows whenever sunnylink is on and no pairing
-    window is armed — including while other apps are already paired, since a
-    window can be re-armed to add another app."""
-    return self._sunnylink_enabled and not pairing_requested()
+  def _render(self, rect):
+    self._scroller.render(rect)
 
-  def _arm_pairing(self):
-    arm_pairing()
+  def show_event(self):
+    super().show_event()
+    ui_state.sunnylink_state.set_settings_open(True)
+    self._scroller.show_event()
+    self._sunnylink_description.set_visible(False)
 
-  def _pairing_rows_visible(self) -> bool:
-    """Discovered/code rows: shown while sunnylink is on and a pairing window
-    is armed (the "Pair App" button was pressed). The code is generated at
-    arm time and self-expires with the window, so it stays readable even while
-    no app beacon is in sight; the discovery row shows "Not discovered" until
-    the phone announces itself."""
-    return self._sunnylink_enabled and pairing_requested()
+  def hide_event(self):
+    super().hide_event()
+    ui_state.sunnylink_state.set_settings_open(False)
 
-  def _paired_local_row_visible(self, i: int) -> bool:
-    return self._sunnylink_enabled and is_locally_paired() and i < len(self._local_apps_cache)
+
+class SunnylinkLocalAppLayout(Widget):
+  """Sub-panel reached from the "Mobile App" row: pair a new app or unpair
+  existing ones. Pushed as a full-screen widget on top of the sunnylink panel;
+  the paired-app rows refresh every frame so a freshly-paired app appears as
+  soon as its dialog closes."""
+
+  def __init__(self):
+    super().__init__()
+    self._local_apps_cache: list[LocalApp] = []
+
+    self._back_button = NavButton(tr("Back"))
+    self._back_button.set_click_callback(gui_app.pop_widget)
+
+    self._pair_app_btn = button_item_sp(
+      title=tr("Pair App"),
+      button_text=tr("PAIR"),
+      description=tr("Open a 5-minute pairing window and show the code to ") +
+                  tr("type into the app. Closing the dialog cancels pairing."),
+      callback=self._show_pairing_code_dialog,
+    )
+
+    self._local_app_rows: list[ListItemSP] = []
+    self._local_app_seps: list[LineSeparator] = []
+    for i in range(MAX_LOCAL_APPS):
+      row = button_item_sp(
+        title=lambda i=i: self._local_app_title(i),
+        button_text=tr("UNPAIR"),
+        description=lambda i=i: self._local_app_endpoint(i),
+        callback=partial(self._unpair_local_app, i),
+      )
+      sep = LineSeparator()
+      row.set_visible(lambda i=i: self._local_row_visible(i))
+      sep.set_visible(lambda i=i: self._local_row_visible(i))
+      self._local_app_rows.append(row)
+      self._local_app_seps.append(sep)
+
+    items = [self._pair_app_btn, LineSeparator()]
+    for row, sep in zip(self._local_app_rows, self._local_app_seps, strict=True):
+      items.extend((row, sep))
+    self._scroller = Scroller(items, line_separator=False, spacing=0)
+
+  def _local_row_visible(self, i: int) -> bool:
+    return i < len(self._local_apps_cache)
 
   def _local_app_title(self, i: int) -> str:
     if i >= len(self._local_apps_cache):
@@ -463,21 +464,8 @@ class SunnylinkLayout(Widget):
       return ""
     return self._local_apps_cache[i].endpoint
 
-  def _refresh_local_rows(self):
-    """Per-frame refresh of the local-mode rows (cheap param reads)."""
-    self._local_apps_cache = get_local_apps()
-    self._local_discovered = latest_discovered_app()
-
-    if self._local_discovered is not None:
-      endpoint, age = self._local_discovered
-      self._local_discovered_text.set_text(endpoint if age < 2 else f"{endpoint} ({age}s)")
-      self._local_discovered_text.color = _LOCAL_ACTIVE_COLOR
-    else:
-      self._local_discovered_text.set_text(tr("Not discovered"))
-      self._local_discovered_text.color = _LOCAL_DISCOVERED_COLOR
-
-    code = read_pairing_code()
-    self._pairing_code_text.set_text(code or "—")
+  def _show_pairing_code_dialog(self):
+    gui_app.push_widget(SunnylinkLocalPairingDialog())
 
   def _unpair_local_app(self, index: int):
     apps = self._local_apps_cache
@@ -496,15 +484,99 @@ class SunnylinkLayout(Widget):
     )
     gui_app.push_widget(dialog)
 
+  def _update_state(self):
+    super()._update_state()
+    self._local_apps_cache = get_local_apps()
+
   def _render(self, rect):
-    self._scroller.render(rect)
+    self._back_button.set_position(self._rect.x, self._rect.y + 20)
+    self._back_button.render()
+    content_rect = rl.Rectangle(rect.x, rect.y + self._back_button.rect.height + 40,
+                                rect.width, rect.height - self._back_button.rect.height - 40)
+    self._scroller.render(content_rect)
 
   def show_event(self):
     super().show_event()
-    ui_state.sunnylink_state.set_settings_open(True)
     self._scroller.show_event()
-    self._sunnylink_description.set_visible(False)
 
   def hide_event(self):
     super().hide_event()
-    ui_state.sunnylink_state.set_settings_open(False)
+    self._scroller.hide_event()
+
+
+class SunnylinkLocalPairingDialog(Widget):
+  """Full-screen dialog showing the 6-digit pairing code.
+
+  Opening it arms the pairing window (fresh code, ~5 min). Closing it cancels
+  pairing (clears the window). When the app completes pairing, the window is
+  already closed by pairLocalApp and the dialog pops itself so the new paired
+  device appears in the sub-panel list.
+  """
+
+  def __init__(self):
+    super().__init__()
+    self._apps_before = len(get_local_apps())
+    arm_pairing()
+    self._close_btn = IconButton(gui_app.texture("icons/close.png", 80, 80))
+    self._close_btn.set_click_callback(self._cancel)
+
+  def _cancel(self):
+    clear_pairing_request()
+    gui_app.pop_widget()
+
+  def _update_state(self):
+    if len(get_local_apps()) > self._apps_before:
+      # Paired — the window was already cleared by pairLocalApp. Just close.
+      gui_app.pop_widget()
+    elif not pairing_requested():
+      # Window expired (~5 min) without pairing — close (nothing to cancel).
+      gui_app.pop_widget()
+
+  def _render(self, rect) -> int:
+    rl.clear_background(rl.Color(224, 224, 224, 255))
+
+    margin = 70
+    content_rect = rl.Rectangle(rect.x + margin, rect.y + margin,
+                                rect.width - 2 * margin, rect.height - 2 * margin)
+    y = content_rect.y
+
+    # Close button
+    close_size = 80
+    pad = 20
+    close_rect = rl.Rectangle(content_rect.x - pad, y - pad, close_size + pad * 2, close_size + pad * 2)
+    self._close_btn.render(close_rect)
+    y += close_size + 40
+
+    # Title
+    title_font = gui_app.font(FontWeight.NORMAL)
+    title_wrapped = wrap_text(title_font, tr("Pair with mobile app"), 75, int(content_rect.width))
+    rl.draw_text_ex(title_font, "\n".join(title_wrapped), rl.Vector2(content_rect.x, y), 75, 0.0, rl.BLACK)
+    y += len(title_wrapped) * 75 + 40
+
+    # The code — big and centered
+    code = read_pairing_code() or "—"
+    code_font = gui_app.font(FontWeight.BOLD)
+    code_size = measure_text_cached(code_font, code, 110)
+    rl.draw_text_ex(code_font, code, rl.Vector2(content_rect.x + (content_rect.width - code_size.x) / 2, y),
+                    110, 0.0, rl.BLACK)
+    y += 170
+
+    # Hint
+    hint_font = gui_app.font(FontWeight.NORMAL)
+    hint_wrapped = wrap_text(hint_font, tr("Enter this code in the sunnylink app on your phone."), 45,
+                             int(content_rect.width))
+    rl.draw_text_ex(hint_font, "\n".join(hint_wrapped), rl.Vector2(content_rect.x, y), 45, 0.0, rl.BLACK)
+    y += len(hint_wrapped) * 45 + 30
+
+    # Discovery status
+    discovered = latest_discovered_app()
+    if discovered is not None:
+      endpoint, age = discovered
+      status = endpoint if age < 2 else f"{endpoint} ({age}s)"
+      color = _LOCAL_ACTIVE_COLOR
+    else:
+      status = tr("Waiting for the app…")
+      color = _LOCAL_DISCOVERED_COLOR
+    status_font = gui_app.font(FontWeight.NORMAL)
+    rl.draw_text_ex(status_font, status, rl.Vector2(content_rect.x, y), 40, 0.0, color)
+    return -1
