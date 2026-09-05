@@ -233,6 +233,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SunnylinkLocalApps", {PERSISTENT, STRING}},
     // SunnylinkLocalPairingCode: rotating 6-char code shown on the device screen for pairing.
     {"SunnylinkLocalPairingCode", {CLEAR_ON_MANAGER_START, STRING}},
+    // SunnylinkLocalDiscoveredApp: JSON {endpoint, app_id, ts} of the most recent app beacon
+    // (unpaired only). Written by the discovery listener for the settings UI; cleared on boot.
+    {"SunnylinkLocalDiscoveredApp", {CLEAR_ON_MANAGER_START, STRING}},
 
     // Backup Manager params
     {"BackupManager_CreateBackup", {PERSISTENT, BOOL}},

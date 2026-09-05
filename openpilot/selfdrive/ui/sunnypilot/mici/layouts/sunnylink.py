@@ -5,21 +5,32 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 import pyray as rl
-
+from functools import partial
 
 from openpilot.cereal import custom
+from openpilot.common.version import sunnylink_consent_version, sunnylink_consent_declined
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigToggle
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigConfirmationDialog
 from openpilot.selfdrive.ui.sunnypilot.mici.layouts.onboarding import SunnylinkConsentPage
 from openpilot.selfdrive.ui.sunnypilot.mici.widgets.sunnylink_pairing_dialog import SunnylinkPairingDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.sunnypilot.sunnylink.api import UNREGISTERED_SUNNYLINK_DONGLE_ID
+from openpilot.sunnypilot.sunnylink.athena.local_discovery import latest_discovered_app
+from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
+  PAIRING_CODE_KEY,
+  LocalApp,
+  get_local_apps,
+  remove_local_app,
+)
 from openpilot.system.ui.lib.application import gui_app, MousePos, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.common.version import sunnylink_consent_version, sunnylink_consent_declined
+
+# Max paired-app rows rendered in the settings list (the registry itself is
+# unbounded — more apps keep working, just not listed).
+MAX_LOCAL_APPS = 4
 
 class SunnylinkInfo(Widget):
   def __init__(self):
@@ -73,11 +84,32 @@ class SunnylinkLayoutMici(NavScroller):
     self._sunnylink_uploader_toggle = BigToggle(text=tr("sunnylink uploader"), initial_state=False,
                                                 toggle_callback=self._sunnylink_uploader_callback)
 
+    # Local (LAN) mode rows — the sunnylink mobile app acts as the backend on
+    # this network. Discovery lives on the app side; these mirror what the
+    # device sees: an app offering pairing + the code to type into it (while
+    # unpaired), or the apps currently paired, each with an unpair action.
+    self._local_apps_cache: list[LocalApp] = []
+    self._local_discovered: tuple[str, int] | None = None
+
+    self._local_discovered_btn = BigButton(tr("local app"), tr("not discovered"))
+    self._local_discovered_btn.set_touch_valid_callback(lambda: False)
+    self._pairing_code_btn = BigButton(tr("pairing code"), "—")
+    self._pairing_code_btn.set_touch_valid_callback(lambda: False)
+
+    self._local_app_btns: list[BigButton] = []
+    for i in range(MAX_LOCAL_APPS):
+      btn = BigButton("", "")
+      btn.set_click_callback(partial(self._confirm_unpair_local_app, i))
+      self._local_app_btns.append(btn)
+
     self._scroller.add_widgets([
       self._sunnylink_info,
       self._sunnylink_toggle,
       self._sunnylink_sponsor_button,
       self._sunnylink_pair_button,
+      self._local_discovered_btn,
+      self._pairing_code_btn,
+      *self._local_app_btns,
       self._backup_btn,
       self._restore_btn,
       self._sunnylink_uploader_toggle
@@ -110,6 +142,54 @@ class SunnylinkLayoutMici(NavScroller):
       self._sunnylink_pair_button.set_text(tr("paired"))
     else:
       self._sunnylink_pair_button.set_text(tr("pair"))
+    self._refresh_local_rows()
+
+  # --- Local (LAN) mode helpers ----------------------------------------------
+
+  def _refresh_local_rows(self):
+    """Per-frame refresh of the local-mode rows (cheap param reads)."""
+    self._local_apps_cache = get_local_apps()
+    self._local_discovered = latest_discovered_app()
+    paired = bool(self._local_apps_cache)
+
+    # Discovery + pairing-code rows only make sense while an app is actively
+    # offering pairing (enabled, nothing paired yet, fresh beacon in sight).
+    show_unpaired = self._sunnylink_enabled and not paired and self._local_discovered is not None
+    self._local_discovered_btn.set_visible(show_unpaired)
+    self._pairing_code_btn.set_visible(show_unpaired)
+
+    for i, btn in enumerate(self._local_app_btns):
+      btn.set_visible(self._sunnylink_enabled and paired and i < len(self._local_apps_cache))
+
+    if self._local_discovered is not None:
+      endpoint, age = self._local_discovered
+      self._local_discovered_btn.set_value(endpoint if age < 2 else f"{endpoint} ({age}s)")
+    else:
+      self._local_discovered_btn.set_value(tr("not discovered"))
+
+    code = ui_state.params.get(PAIRING_CODE_KEY)
+    self._pairing_code_btn.set_value(code or "—")
+
+    for i, btn in enumerate(self._local_app_btns):
+      if i < len(self._local_apps_cache):
+        app = self._local_apps_cache[i]
+        btn.set_text(app.app_name or app.app_id)
+        btn.set_value(app.endpoint)
+
+  def _confirm_unpair_local_app(self, index: int):
+    apps = self._local_apps_cache
+    if index >= len(apps):
+      return
+    app = apps[index]
+    name = app.app_name or app.app_id
+    icon = gui_app.texture("icons_mici/settings/device/update.png", 64, 64)
+    dlg = BigConfirmationDialog(
+      tr("slide to unpair") + f" {name}",
+      icon,
+      confirm_callback=lambda: remove_local_app(app.app_id),
+      red=True,
+    )
+    gui_app.push_widget(dlg)
 
   def show_event(self):
     super().show_event()

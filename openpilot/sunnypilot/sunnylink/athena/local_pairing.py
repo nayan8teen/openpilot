@@ -25,6 +25,9 @@ SUNNYLINK_LOCAL_WS_PORT = 8443
 
 LOCAL_APPS_KEY = "SunnylinkLocalApps"
 PAIRING_CODE_KEY = "SunnylinkLocalPairingCode"
+# Status written by the discovery listener (most recent app beacon) so the
+# on-device settings UI can show "app discovered" across processes.
+DISCOVERED_APP_KEY = "SunnylinkLocalDiscoveredApp"
 
 # 6 chars from an unambiguous alphabet (no 0/O/1/I) — typed from the device
 # screen into the mobile app.

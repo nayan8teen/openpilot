@@ -5,22 +5,38 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 import pyray as rl
+from functools import partial
 from openpilot.cereal import custom
+from openpilot.common.version import sunnylink_consent_version
 from openpilot.selfdrive.ui.sunnypilot.layouts.onboarding import SunnylinkConsentPage
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.sunnypilot.sunnylink.api import UNREGISTERED_SUNNYLINK_DONGLE_ID
+from openpilot.sunnypilot.sunnylink.athena.local_discovery import latest_discovered_app
+from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
+  PAIRING_CODE_KEY,
+  LocalApp,
+  get_local_apps,
+  is_locally_paired,
+  remove_local_app,
+)
 from openpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignment, TextAlignmentVertical
 from openpilot.system.ui.lib.multilang import tr
-from openpilot.system.ui.sunnypilot.widgets.list_view import button_item_sp
-from openpilot.system.ui.sunnypilot.widgets.list_view import toggle_item_sp
+from openpilot.system.ui.sunnypilot.widgets.list_view import ListItemSP, button_item_sp, toggle_item_sp
 from openpilot.system.ui.sunnypilot.widgets.sunnylink_pairing_dialog import SunnylinkPairingDialog
 from openpilot.system.ui.widgets import Widget, DialogResult
 from openpilot.system.ui.widgets.button import ButtonStyle, Button
 from openpilot.system.ui.widgets.confirm_dialog import alert_dialog, ConfirmDialog
 from openpilot.system.ui.widgets.label import UnifiedLabel
-from openpilot.system.ui.widgets.list_view import dual_button_item
+from openpilot.system.ui.widgets.list_view import TextAction, dual_button_item
 from openpilot.system.ui.widgets.scroller_tici import Scroller, LineSeparator
-from openpilot.common.version import sunnylink_consent_version
+
+# Max paired-app rows rendered in the settings list (the registry itself is
+# unbounded — more apps keep working, just not listed). One row per paired app.
+MAX_LOCAL_APPS = 4
+
+# Read-only value colors used by the local-mode rows.
+_LOCAL_DISCOVERED_COLOR = rl.Color(170, 170, 170, 255)  # grey: no app in sight
+_LOCAL_ACTIVE_COLOR = rl.Color(0, 255, 0, 255)          # green: discovered / pairing code
 
 
 class SunnylinkHeader(Widget):
@@ -192,6 +208,41 @@ class SunnylinkLayout(Widget):
     self._backup_btn.set_button_style(ButtonStyle.NORMAL)
     self._restore_btn.set_button_style(ButtonStyle.PRIMARY)
 
+    # --- Local (LAN) mode rows -----------------------------------------------
+    # While unpaired: "app discovered" + the pairing code to type into the app.
+    # While paired: one row per paired app with an UNPAIR button. Contents and
+    # visibility (row + its separator) refresh every frame in _update_state, so
+    # hidden rows leave no stray divider lines behind.
+    self._local_apps_cache: list[LocalApp] = []
+    self._local_discovered: tuple[str, int] | None = None  # (endpoint, age_s)
+
+    self._local_discovered_text = TextAction(tr("Not discovered"), color=_LOCAL_DISCOVERED_COLOR)
+    self._local_discovered_row = ListItemSP(title=tr("Local app"), action_item=self._local_discovered_text)
+    self._local_discovered_sep = LineSeparator()
+
+    self._pairing_code_text = TextAction("", color=_LOCAL_ACTIVE_COLOR)
+    self._pairing_code_row = ListItemSP(title=tr("Pairing code"), action_item=self._pairing_code_text)
+    self._pairing_code_sep = LineSeparator()
+
+    for w in (self._local_discovered_row, self._local_discovered_sep,
+              self._pairing_code_row, self._pairing_code_sep):
+      w.set_visible(lambda: self._unpaired_local_rows_visible())
+
+    self._local_app_rows: list[ListItemSP] = []
+    self._local_app_seps: list[LineSeparator] = []
+    for i in range(MAX_LOCAL_APPS):
+      row = button_item_sp(
+        title=lambda i=i: self._local_app_title(i),
+        button_text=tr("UNPAIR"),
+        description=lambda i=i: self._local_app_endpoint(i),
+        callback=partial(self._unpair_local_app, i),
+      )
+      sep = LineSeparator()
+      row.set_visible(lambda i=i: self._paired_local_row_visible(i))
+      sep.set_visible(lambda i=i: self._paired_local_row_visible(i))
+      self._local_app_rows.append(row)
+      self._local_app_seps.append(sep)
+
     items = [
       SunnylinkHeader(),
       LineSeparator(),
@@ -202,10 +253,18 @@ class SunnylinkLayout(Widget):
       LineSeparator(),
       self._pair_btn,
       LineSeparator(),
+      self._local_discovered_row,
+      self._local_discovered_sep,
+      self._pairing_code_row,
+      self._pairing_code_sep,
+    ]
+    for row, sep in zip(self._local_app_rows, self._local_app_seps, strict=True):
+      items.extend((row, sep))
+    items.extend((
       self._sunnylink_uploader_toggle,
       LineSeparator(),
-      self._sunnylink_backup_restore_buttons
-    ]
+      self._sunnylink_backup_restore_buttons,
+    ))
     return items
 
   @staticmethod
@@ -351,6 +410,61 @@ class SunnylinkLayout(Widget):
     pair_btn_text = tr("Paired") if ui_state.sunnylink_state.is_paired() else tr("Not Paired")
     self._pair_btn.action_item.set_text(pair_btn_text)
     self._pair_btn.action_item.set_enabled(self._sunnylink_enabled)
+    self._refresh_local_rows()
+
+  # --- Local (LAN) mode helpers ----------------------------------------------
+
+  def _unpaired_local_rows_visible(self) -> bool:
+    """Discovered/code rows: shown while sunnylink is on, no app is paired yet,
+    and an app is currently announcing itself on the network."""
+    return self._sunnylink_enabled and not is_locally_paired() and self._local_discovered is not None
+
+  def _paired_local_row_visible(self, i: int) -> bool:
+    return self._sunnylink_enabled and is_locally_paired() and i < len(self._local_apps_cache)
+
+  def _local_app_title(self, i: int) -> str:
+    if i >= len(self._local_apps_cache):
+      return ""
+    app = self._local_apps_cache[i]
+    return app.app_name or app.app_id
+
+  def _local_app_endpoint(self, i: int) -> str:
+    if i >= len(self._local_apps_cache):
+      return ""
+    return self._local_apps_cache[i].endpoint
+
+  def _refresh_local_rows(self):
+    """Per-frame refresh of the local-mode rows (cheap param reads)."""
+    self._local_apps_cache = get_local_apps()
+    self._local_discovered = latest_discovered_app()
+
+    if self._local_discovered is not None:
+      endpoint, age = self._local_discovered
+      self._local_discovered_text.set_text(endpoint if age < 2 else f"{endpoint} ({age}s)")
+      self._local_discovered_text.color = _LOCAL_ACTIVE_COLOR
+    else:
+      self._local_discovered_text.set_text(tr("Not discovered"))
+      self._local_discovered_text.color = _LOCAL_DISCOVERED_COLOR
+
+    code = ui_state.params.get(PAIRING_CODE_KEY)
+    self._pairing_code_text.set_text(code or "—")
+
+  def _unpair_local_app(self, index: int):
+    apps = self._local_apps_cache
+    if index >= len(apps):
+      return
+    app = apps[index]
+    name = app.app_name or app.app_id
+
+    def on_confirm(_dialog_result: int):
+      remove_local_app(app.app_id)
+
+    dialog = ConfirmDialog(
+      text=tr("Unpair") + f" {name}? " + tr("You will need the pairing code again to reconnect it."),
+      confirm_text=tr("Unpair"),
+      callback=on_confirm,
+    )
+    gui_app.push_widget(dialog)
 
   def _render(self, rect):
     self._scroller.render(rect)

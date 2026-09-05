@@ -35,7 +35,7 @@ from openpilot.sunnypilot.sunnylink.api import SunnylinkApi
 from openpilot.sunnypilot.sunnylink.utils import sunnylink_need_register, sunnylink_ready, get_param_as_byte, save_param_from_base64_encoded_string
 from openpilot.sunnypilot.sunnylink.capabilities import generate_capabilities, CAPABILITY_LABELS
 from openpilot.sunnypilot.sunnylink.tools.generate_settings_schema import generate_schema
-from openpilot.sunnypilot.sunnylink.athena.local_discovery import LocalDiscovery
+from openpilot.sunnypilot.sunnylink.athena.local_discovery import LOCAL_BEACON_FRESH_S, LocalDiscovery
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   LocalApp,
   PairingCodeRotator,
@@ -60,7 +60,6 @@ DISALLOW_LOG_UPLOAD = threading.Event()
 # --- pairing) and falls back to the cloud host when none is reachable.      ---
 LOCAL_PAIRING_SESSION_TIMEOUT_S = 300  # how long an unpaired dial may wait for a code
 LOCAL_PROBE_INTERVAL_S = 60             # while on the cloud link, probe cadence for the app
-LOCAL_BEACON_FRESH_S = 30               # app beacons older than this are stale (app gone)
 LOCAL_ENDPOINT_BACKOFF_S = 300          # retry a failed local endpoint / pairing offer after this
 
 # Endpoint of the local app on the CURRENT connection. The pairing RPCs pin

@@ -17,10 +17,15 @@ from openpilot.common.swaglog import cloudlog
 
 from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   BEACON_PREFIX,
+  DISCOVERED_APP_KEY,
   SUNNYLINK_LOCAL_UDP_PORT,
   format_endpoint,
   is_locally_paired,
 )
+
+# App beacons older than this are stale (the app left the network). Shared by
+# sunnylinkd (connection selection) and the settings UI ("app discovered" row).
+LOCAL_BEACON_FRESH_S = 30
 
 
 @dataclass
@@ -86,7 +91,7 @@ class LocalDiscovery(threading.Thread):
   """
 
   def __init__(self, params: Params | None = None, port: int = SUNNYLINK_LOCAL_UDP_PORT,
-               sock: socket.socket | None = None):
+               sock: socket.socket | None = None, write_interval_s: float = 5.0):
     super().__init__(name="local_discovery_listener", daemon=True)
     self.params = params or Params()
     self.port = port
@@ -96,6 +101,14 @@ class LocalDiscovery(threading.Thread):
     self._last_seen_monotonic: float = 0.0
     self._lock = threading.Lock()
     self._stop_event = threading.Event()
+    # Status-param bookkeeping: reflect the app beacon in `SunnylinkLocalDiscoveredApp`
+    # (for the settings UI, which runs in another process) but only write on change
+    # or at most every [write_interval_s] so beacon chatter doesn't churn the store.
+    self.write_interval_s = write_interval_s
+    self._last_write_monotonic = 0.0
+    self._last_written_endpoint: str | None = None
+    self._last_written_app_id: str | None = None
+    self._discovered_cleared = False
 
   def stop(self) -> None:
     self._stop_event.set()
@@ -118,16 +131,53 @@ class LocalDiscovery(threading.Thread):
       return time.monotonic() - self._last_seen_monotonic
 
   def _handle(self, raw: bytes, source_ip: str) -> None:
-    if is_locally_paired(self.params):
-      # Paired devices pin the endpoint from pairing — never a random beacon.
-      return
     beacon = parse_beacon(raw, source_ip)
     if beacon is None:
+      return
+    if is_locally_paired(self.params):
+      # Paired devices pin the endpoint from pairing — never a random beacon.
+      self._clear_discovered_param()
       return
     with self._lock:
       self._latest_endpoint = beacon.endpoint
       self._last_seen_monotonic = time.monotonic()
+    self._write_discovered_param(beacon)
     cloudlog.debug(f"local_discovery.app_found {beacon.app_id} at {beacon.endpoint}")
+
+  def _clear_discovered_param(self) -> None:
+    """Drop the stale "discovered" status once the device is paired."""
+    if self._discovered_cleared:
+      return
+    self._discovered_cleared = True
+    try:
+      self.params.remove(DISCOVERED_APP_KEY)
+    except Exception:
+      cloudlog.exception("local_discovery.param_clear.exception")
+
+  def _write_discovered_param(self, beacon: AppBeacon) -> None:
+    """Mirror the freshest beacon into a param the settings UI can read."""
+    now = time.monotonic()
+    changed = beacon.endpoint != self._last_written_endpoint or beacon.app_id != self._last_written_app_id
+    if not changed and now - self._last_write_monotonic < self.write_interval_s:
+      return
+    self._last_write_monotonic = now
+    self._last_written_endpoint = beacon.endpoint
+    self._last_written_app_id = beacon.app_id
+    self._discovered_cleared = False
+    payload = json.dumps({
+      "endpoint": beacon.endpoint,
+      "app_id": beacon.app_id,
+      # Wall-clock epoch is intentional — this param is read by the settings UI
+      # in another process, so a monotonic (process-local) clock won't do.
+      "ts": int(time.time()),  # noqa: TID251
+    }, separators=(",", ":"))
+    try:
+      # block=True: the settings UI (another process) must see this promptly.
+      # Writes are throttled to every [write_interval_s] at most, so this is
+      # at most a couple of disk writes a minute while an app is announcing.
+      self.params.put(DISCOVERED_APP_KEY, payload, block=True)
+    except Exception:
+      cloudlog.exception("local_discovery.param_write.exception")
 
   def _bind(self) -> socket.socket:
     if self._sock is not None:
@@ -158,3 +208,31 @@ class LocalDiscovery(threading.Thread):
         sock.close()
       except OSError:
         pass
+
+
+def latest_discovered_app(params: Params | None = None,
+                          fresh_s: float = LOCAL_BEACON_FRESH_S) -> tuple[str, int] | None:
+  """
+  The endpoint of the app most recently announcing itself — provided its beacon
+  is still fresh — read from the status param the discovery listener writes.
+
+  Returns (endpoint, age_s) or None when nothing has been heard (or the last
+  beacon went stale). Runs in any process (e.g. the settings UI) without
+  touching the UDP socket; pairing state is the caller's concern.
+  """
+  params = params or Params()
+  raw = params.get(DISCOVERED_APP_KEY)
+  if not raw:
+    return None
+  try:
+    data = json.loads(raw)
+    endpoint = str(data.get("endpoint", ""))
+    ts = int(data.get("ts") or 0)
+  except (ValueError, TypeError):
+    return None
+  if not endpoint or ts <= 0:
+    return None
+  age = time.time() - ts  # noqa: TID251 -- wall-clock epoch written by the listener
+  if age > fresh_s:
+    return None
+  return endpoint, max(0, int(age))
