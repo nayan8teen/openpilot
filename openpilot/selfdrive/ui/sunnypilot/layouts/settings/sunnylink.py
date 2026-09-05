@@ -415,9 +415,12 @@ class SunnylinkLayout(Widget):
   # --- Local (LAN) mode helpers ----------------------------------------------
 
   def _unpaired_local_rows_visible(self) -> bool:
-    """Discovered/code rows: shown while sunnylink is on, no app is paired yet,
-    and an app is currently announcing itself on the network."""
-    return self._sunnylink_enabled and not is_locally_paired() and self._local_discovered is not None
+    """Discovered/code rows: shown while sunnylink is on and no app is paired
+    yet. The pairing code is generated whenever the device is unpaired (the
+    rotator runs independently of discovery), so it must stay readable even
+    while no app beacon is in sight; the discovery row shows "Not discovered"
+    until the phone announces itself."""
+    return self._sunnylink_enabled and not is_locally_paired()
 
   def _paired_local_row_visible(self, i: int) -> bool:
     return self._sunnylink_enabled and is_locally_paired() and i < len(self._local_apps_cache)

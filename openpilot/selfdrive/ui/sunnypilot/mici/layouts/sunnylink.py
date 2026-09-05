@@ -152,9 +152,12 @@ class SunnylinkLayoutMici(NavScroller):
     self._local_discovered = latest_discovered_app()
     paired = bool(self._local_apps_cache)
 
-    # Discovery + pairing-code rows only make sense while an app is actively
-    # offering pairing (enabled, nothing paired yet, fresh beacon in sight).
-    show_unpaired = self._sunnylink_enabled and not paired and self._local_discovered is not None
+    # Discovery + pairing-code rows: shown while sunnylink is on and nothing is
+    # paired yet. The pairing code is generated whenever the device is unpaired
+    # (the rotator runs independently of discovery), so it must stay readable
+    # even while no app beacon is in sight; the discovery button reads
+    # "not discovered" until the phone announces itself.
+    show_unpaired = self._sunnylink_enabled and not paired
     self._local_discovered_btn.set_visible(show_unpaired)
     self._pairing_code_btn.set_visible(show_unpaired)
 
