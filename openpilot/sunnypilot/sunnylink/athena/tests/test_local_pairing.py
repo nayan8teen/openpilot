@@ -60,6 +60,7 @@ class TestPairingCode(OpenpilotTestCase):
     for _ in range(50):
       code = generate_pairing_code()
       assert len(code) == PAIRING_CODE_LENGTH
+      assert code.isdigit(), "pairing code must be numeric (the app accepts digits only)"
       assert all(c in PAIRING_CODE_ALPHABET for c in code)
 
   def test_get_pairing_code_creates_and_persists(self):

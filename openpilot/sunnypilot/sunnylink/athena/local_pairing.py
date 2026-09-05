@@ -33,10 +33,12 @@ PAIRING_REQUEST_KEY = "SunnylinkLocalPairingRequest"
 # on-device settings UI can show "app discovered" across processes.
 DISCOVERED_APP_KEY = "SunnylinkLocalDiscoveredApp"
 
-# 6 chars from an unambiguous alphabet (no 0/O/1/I) — typed from the device
-# screen into the mobile app.
+# 6 NUMERIC digits — the mobile app's pairing-code field accepts digits only
+# (it filters non-digits and requires exactly 6, see LocalModeScreen). The
+# alphabet must stay numeric; 10^6 combinations over the 5-minute window is
+# plenty for a LAN pairing handshake.
 PAIRING_CODE_LENGTH = 6
-PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+PAIRING_CODE_ALPHABET = "0123456789"
 DEFAULT_CODE_ROTATION_S = 10 * 60  # re-roll the displayed code every 10 min
 # How long an armed pairing window stays open before it self-expires (and the
 # request flag is dropped). The device-side "Pair App" action is a deliberate
@@ -117,6 +119,7 @@ def remove_all_local_apps(params: Params | None = None) -> None:
 
 
 def generate_pairing_code() -> str:
+  """A 6-digit numeric pairing code (the mobile app's code field is digits-only)."""
   return "".join(secrets.choice(PAIRING_CODE_ALPHABET) for _ in range(PAIRING_CODE_LENGTH))
 
 

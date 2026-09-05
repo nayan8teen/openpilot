@@ -231,7 +231,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // Local (LAN) mode params — the sunnylink mobile app acts as the backend on the LAN.
     // SunnylinkLocalApps: JSON list of paired apps [{app_id, app_name, endpoint, paired_at}].
     {"SunnylinkLocalApps", {PERSISTENT, JSON}},
-    // SunnylinkLocalPairingCode: rotating 6-char code shown on the device screen for pairing,
+    // SunnylinkLocalPairingCode: rotating 6-digit code shown on the device screen for pairing,
     // stored as a JSON document {"code": "..."}.
     {"SunnylinkLocalPairingCode", {CLEAR_ON_MANAGER_START, JSON}},
     // SunnylinkLocalDiscoveredApp: JSON {endpoint, app_id, ts} of the most recent app beacon
