@@ -17,6 +17,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   arm_pairing,
   clear_pairing_request,
   get_local_apps,
+  local_app_display_name,
   pairing_requested,
   read_pairing_code,
   remove_local_app,
@@ -456,8 +457,7 @@ class SunnylinkLocalAppLayout(Widget):
   def _local_app_title(self, i: int) -> str:
     if i >= len(self._local_apps_cache):
       return ""
-    app = self._local_apps_cache[i]
-    return app.app_name or app.app_id
+    return local_app_display_name(self._local_apps_cache[i])
 
   def _local_app_endpoint(self, i: int) -> str:
     if i >= len(self._local_apps_cache):
@@ -472,7 +472,7 @@ class SunnylinkLocalAppLayout(Widget):
     if index >= len(apps):
       return
     app = apps[index]
-    name = app.app_name or app.app_id
+    name = local_app_display_name(app)
 
     def on_confirm(_dialog_result: int):
       remove_local_app(app.app_id)

@@ -47,6 +47,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   local_identity,
   pairing_requested,
   remove_local_app,
+  set_local_app_alias,
   verify_pairing_code,
 )
 
@@ -304,14 +305,16 @@ def startLocalProxy(global_end_event: threading.Event, remote_ws_uri: str, local
 
 
 @dispatcher.add_method
-def pairLocalApp(code: str, app_id: str = "", app_name: str = "") -> dict[str, bool | str]:
+def pairLocalApp(code: str, app_id: str = "", app_name: str = "", alias: str = "") -> dict[str, bool | str]:
   """
   Complete pairing with the mobile app on the CURRENT local connection.
 
   The user typed the code (shown on this device's screen) into the app; the app
   dialed us and calls this over the local link. On success the app is added to
   the paired registry pinned to the endpoint of the connection it ran on, so a
-  random LAN peer can never redirect a paired device.
+  random LAN peer can never redirect a paired device. `alias` is the app's
+  friendly name (set from the app) — the label the device UI shows for this
+  app (falling back to app_name/app_id on legacy entries).
   """
   if _active_local_endpoint is None:
     return {"success": False, "error": "not connected to a local app"}
@@ -319,12 +322,26 @@ def pairLocalApp(code: str, app_id: str = "", app_name: str = "") -> dict[str, b
     cloudlog.warning("sunnylinkd.pairLocalApp.invalid_code")
     return {"success": False, "error": "invalid code"}
   add_local_app(LocalApp(app_id=app_id or f"app@{_active_local_endpoint}",
-                         endpoint=_active_local_endpoint, app_name=app_name))
+                         endpoint=_active_local_endpoint, app_name=app_name, alias=alias))
   # Pairing succeeded — close the pairing window. The app is now in the
   # registry pinned to this connection's endpoint, and this same connection
   # switches from pairing-only to serving normally.
   clear_pairing_request()
   return {"success": True}
+
+
+@dispatcher.add_method
+def updateLocalAppAlias(app_id: str, alias: str) -> dict[str, bool | str]:
+  """
+  Rename a paired app (the name this device shows for it) — called by the app
+  itself over the local link when the user edits its display name. Idempotent:
+  an unknown app_id is a no-op. Bounded like the other app-initiated local
+  RPCs; the caller always passes its own app_id.
+  """
+  if _active_local_endpoint is None:
+    return {"success": False, "error": "not connected to a local app"}
+  updated = set_local_app_alias(app_id, alias)
+  return {"success": True, "updated": updated}
 
 
 @dispatcher.add_method

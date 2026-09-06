@@ -26,11 +26,13 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   get_local_apps,
   get_pairing_code,
   is_locally_paired,
+  local_app_display_name,
   local_identity,
   pairing_requested,
   read_pairing_code,
   remove_all_local_apps,
   remove_local_app,
+  set_local_app_alias,
   update_local_app_endpoint,
   verify_pairing_code,
 )
@@ -154,6 +156,48 @@ class TestLocalAppsRegistry(OpenpilotTestCase):
     assert apps[0].endpoint == "ws://10.0.0.99:8443"
     assert apps[0].app_name == "Pixel"  # preserved
     assert apps[0].paired_at > 0        # preserved
+
+  def test_update_local_app_endpoint_preserves_alias(self):
+    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443",
+                           app_name="Pixel", alias="My Phone"), self.params)
+    assert update_local_app_endpoint("app-1", "ws://10.0.0.99:8443", self.params)
+    apps = get_local_apps(self.params)
+    assert apps[0].alias == "My Phone"
+
+  def test_alias_round_trip(self):
+    """The app-set alias is persisted with the rest of the app's details."""
+    add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443",
+                           app_name="Pixel", alias="My Phone"), self.params)
+    apps = get_local_apps(self.params)
+    assert apps[0].alias == "My Phone"
+    # from_dict round-trip via the stored document.
+    raw = self.params.get(LOCAL_APPS_KEY)
+    assert raw[0]["alias"] == "My Phone"
+    assert raw[0]["app_name"] == "Pixel"
+
+  def test_set_local_app_alias_updates_in_place(self):
+    add_local_app(self.app(), self.params)
+    assert set_local_app_alias("app-1", "My Pixel", self.params)
+    apps = get_local_apps(self.params)
+    assert apps[0].alias == "My Pixel"
+    assert apps[0].app_name == "Pixel"  # untouched
+    # Same value again → no change.
+    assert not set_local_app_alias("app-1", "My Pixel", self.params)
+
+  def test_set_local_app_alias_unknown_app_noop(self):
+    add_local_app(self.app(), self.params)
+    assert not set_local_app_alias("stranger", "X", self.params)
+    apps = get_local_apps(self.params)
+    assert len(apps) == 1
+    assert apps[0].alias == ""
+
+  def test_local_app_display_name_precedence(self):
+    """The device UI label: alias → app_name → app_id."""
+    assert local_app_display_name(LocalApp(app_id="a", endpoint="", app_name="Pixel", alias="My Phone")) == "My Phone"
+    assert local_app_display_name(LocalApp(app_id="a", endpoint="", app_name="Pixel")) == "Pixel"
+    assert local_app_display_name(LocalApp(app_id="a", endpoint="")) == "a"
+    # Legacy entries (no alias) fall back exactly as before.
+    assert local_app_display_name(LocalApp(app_id="a", endpoint="", app_name="sunnylink mobile")) == "sunnylink mobile"
 
   def test_update_local_app_endpoint_no_change_or_unknown(self):
     add_local_app(self.app(), self.params)

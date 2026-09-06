@@ -21,6 +21,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   arm_pairing,
   clear_pairing_request,
   get_local_apps,
+  local_app_display_name,
   pairing_requested,
   read_pairing_code,
   remove_local_app,
@@ -305,7 +306,7 @@ class LocalAppsPanelMici(NavScroller):
       btn.set_visible(i < len(self._local_apps_cache))
       if i < len(self._local_apps_cache):
         app = self._local_apps_cache[i]
-        btn.set_text(app.app_name or app.app_id)
+        btn.set_text(local_app_display_name(app))
         btn.set_value(app.endpoint)
 
   def _confirm_unpair_local_app(self, index: int):
@@ -313,7 +314,7 @@ class LocalAppsPanelMici(NavScroller):
     if index >= len(apps):
       return
     app = apps[index]
-    name = app.app_name or app.app_id
+    name = local_app_display_name(app)
     icon = gui_app.texture("icons_mici/settings/device/update.png", 64, 64)
     dlg = BigConfirmationDialog(
       tr("slide to unpair") + f" {name}",

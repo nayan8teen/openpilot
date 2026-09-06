@@ -57,6 +57,10 @@ class LocalApp:
   app_id: str
   endpoint: str
   app_name: str = ""
+  # The app's friendly name, set from the app itself (paired-app button label
+  # precedence: alias → app_name → app_id). Optional — legacy entries pair
+  # without it and fall back to app_name.
+  alias: str = ""
   paired_at: int = 0  # epoch seconds
 
   @staticmethod
@@ -65,8 +69,15 @@ class LocalApp:
       app_id=str(data.get("app_id", "")),
       endpoint=str(data.get("endpoint", "")),
       app_name=str(data.get("app_name", "")),
+      alias=str(data.get("alias", "")),
       paired_at=int(data.get("paired_at") or 0),
     )
+
+
+def local_app_display_name(app: LocalApp) -> str:
+  """The label for a paired app in the device UI: the app-set alias wins,
+  then the app's own name, then its id (the id always exists)."""
+  return app.alias or app.app_name or app.app_id
 
 
 def is_locally_paired(params: Params | None = None) -> bool:
@@ -107,7 +118,7 @@ def update_local_app_endpoint(app_id: str, endpoint: str, params: Params | None 
 
   IPs are not identity: the app can move between networks, so the discovery
   listener re-learns its address from the app's own beacon. The app's
-  app_name/paired_at are preserved; returns True only when the endpoint
+  app_name/alias/paired_at are preserved; returns True only when the endpoint
   actually changed (callers can then react — e.g. force a re-selection).
   """
   apps = get_local_apps(params)
@@ -115,9 +126,28 @@ def update_local_app_endpoint(app_id: str, endpoint: str, params: Params | None 
     if app.app_id != app_id or app.endpoint == endpoint:
       continue
     apps[i] = LocalApp(app_id=app.app_id, endpoint=endpoint,
-                       app_name=app.app_name, paired_at=app.paired_at)
+                       app_name=app.app_name, alias=app.alias, paired_at=app.paired_at)
     _save_local_apps(apps, params)
     cloudlog.event("local_pairing.app_endpoint_refreshed", app_id=app_id, endpoint=endpoint)
+    return True
+  return False
+
+
+def set_local_app_alias(app_id: str, alias: str, params: Params | None = None) -> bool:
+  """
+  Update a PAIRED app's alias (the name the device shows for it, set from the
+  app itself). Idempotent — an unknown app_id is a no-op that returns False.
+  """
+  apps = get_local_apps(params)
+  for i, app in enumerate(apps):
+    if app.app_id != app_id:
+      continue
+    if app.alias == alias:
+      return False
+    apps[i] = LocalApp(app_id=app.app_id, endpoint=app.endpoint,
+                       app_name=app.app_name, alias=alias, paired_at=app.paired_at)
+    _save_local_apps(apps, params)
+    cloudlog.event("local_pairing.app_alias_updated", app_id=app_id, alias=alias)
     return True
   return False
 

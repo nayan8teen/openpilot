@@ -66,14 +66,35 @@ class TestPairLocalAppHandler(OpenpilotTestCase):
     mocker.patch.object(sunnylinkd, "add_local_app", side_effect=lambda app: self.registry.append(app))
     mocker.patch.object(sunnylinkd, "clear_pairing_request")  # window closes on success
 
-    result = sunnylinkd.pairLocalApp(code="ABC123", app_id="app-1", app_name="Pixel 9")
+    result = sunnylinkd.pairLocalApp(code="ABC123", app_id="app-1", app_name="Pixel 9", alias="My Pixel")
     assert result == {"success": True}
     assert len(self.registry) == 1
     app = self.registry[0]
     assert app.app_id == "app-1"
     assert app.endpoint == "ws://10.0.0.5:8443"
     assert app.app_name == "Pixel 9"
+    assert app.alias == "My Pixel"
     sunnylinkd.clear_pairing_request.assert_called_once()
+
+  def test_update_local_app_alias(self, mocker):
+    mocker.patch.object(sunnylinkd, "_active_local_endpoint", "ws://10.0.0.5:8443")
+    mocker.patch.object(sunnylinkd, "set_local_app_alias", return_value=True)
+    result = sunnylinkd.updateLocalAppAlias(app_id="app-1", alias="My Pixel")
+    assert result == {"success": True, "updated": True}
+    sunnylinkd.set_local_app_alias.assert_called_once_with("app-1", "My Pixel")  # type: ignore[attr-defined]
+
+  def test_update_local_app_alias_unknown_app(self, mocker):
+    mocker.patch.object(sunnylinkd, "_active_local_endpoint", "ws://10.0.0.5:8443")
+    mocker.patch.object(sunnylinkd, "set_local_app_alias", return_value=False)
+    result = sunnylinkd.updateLocalAppAlias(app_id="stranger", alias="X")
+    assert result == {"success": True, "updated": False}
+
+  def test_update_local_app_alias_without_local_connection(self, mocker):
+    mocker.patch.object(sunnylinkd, "_active_local_endpoint", None)
+    mocker.patch.object(sunnylinkd, "set_local_app_alias",
+                        side_effect=AssertionError("must not write over cloud link"))
+    result = sunnylinkd.updateLocalAppAlias(app_id="app-1", alias="X")
+    assert result["success"] is False
 
   def test_invalid_code_rejected(self, mocker):
     mocker.patch.object(sunnylinkd, "_active_local_endpoint", "ws://10.0.0.5:8443")
@@ -313,7 +334,7 @@ class TestPairedRefresh(OpenpilotTestCase):
     sunnylinkd._pairing_in_progress.clear()
     backoffs = {"ws://10.0.0.2:8443": time.monotonic() + 9999}
 
-    sunnylinkd._handle_paired_refresh(backoffs, self._beacon())
+    sunnylinkd._handle_paired_refresh(backoffs, {}, self._beacon())
 
     assert sunnylinkd._active_ws.closed
     assert backoffs == {}, "the app's stale endpoint must not stay backoff-locked"
@@ -325,7 +346,7 @@ class TestPairedRefresh(OpenpilotTestCase):
     mocker.patch.object(sunnylinkd, "_active_ws", ws)
     sunnylinkd._pairing_in_progress.clear()
 
-    sunnylinkd._handle_paired_refresh({}, self._beacon())
+    sunnylinkd._handle_paired_refresh({}, {}, self._beacon())
 
     assert not ws.closed
 
@@ -338,7 +359,7 @@ class TestPairedRefresh(OpenpilotTestCase):
     mocker.patch.object(sunnylinkd, "_active_ws", ws)
     sunnylinkd._pairing_in_progress.clear()
 
-    sunnylinkd._handle_paired_refresh({}, self._beacon())
+    sunnylinkd._handle_paired_refresh({}, {}, self._beacon())
 
     assert not ws.closed
 
@@ -350,7 +371,7 @@ class TestPairedRefresh(OpenpilotTestCase):
     mocker.patch.object(sunnylinkd, "_active_ws", ws)
     sunnylinkd._pairing_in_progress.set()
     try:
-      sunnylinkd._handle_paired_refresh({}, self._beacon())
+      sunnylinkd._handle_paired_refresh({}, {}, self._beacon())
     finally:
       sunnylinkd._pairing_in_progress.clear()
     assert not ws.closed
@@ -362,7 +383,7 @@ class TestPairedRefresh(OpenpilotTestCase):
     mocker.patch.object(sunnylinkd, "_active_ws", ws)
     sunnylinkd._pairing_in_progress.clear()
 
-    sunnylinkd._handle_paired_refresh({}, self._beacon(app_id="stranger"))
+    sunnylinkd._handle_paired_refresh({}, {}, self._beacon(app_id="stranger"))
 
     assert not ws.closed
 
