@@ -269,7 +269,18 @@ class TestPairingWindow(OpenpilotTestCase):
     arm_pairing(self.params)
     # Age the code's armed-at timestamp beyond the window.
     self.params.put(PAIRING_CODE_KEY,
-                    {"code": "ABC123", "ts": int(time.time()) - PAIRING_WINDOW_S - 1},  # noqa: TID251
+                    {"code": "ABC123", "ts": int(time.monotonic()) - PAIRING_WINDOW_S - 1},
+                    block=True)
+    assert not pairing_requested(self.params)
+    assert not self.params.get_bool(PAIRING_REQUEST_KEY)
+    assert self.params.get(PAIRING_CODE_KEY) is None
+
+  def test_window_does_not_survive_reboot(self):
+    """Monotonic restarts at boot — a code armed before the reboot reads as
+    future-dated and must be dropped, not kept alive."""
+    arm_pairing(self.params)
+    self.params.put(PAIRING_CODE_KEY,
+                    {"code": "ABC123", "ts": int(time.monotonic()) + 1000},
                     block=True)
     assert not pairing_requested(self.params)
     assert not self.params.get_bool(PAIRING_REQUEST_KEY)

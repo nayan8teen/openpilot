@@ -140,8 +140,8 @@ def generate_pairing_code() -> str:
 
 
 def _write_pairing_code(code: str, params: Params) -> None:
-  """Persist the code with its armed-at timestamp — the window is derived from it."""
-  params.put(PAIRING_CODE_KEY, {"code": code, "ts": int(time.time())}, block=True)  # noqa: TID251
+  """Persist the code with its armed-at monotonic timestamp — the window is derived from it."""
+  params.put(PAIRING_CODE_KEY, {"code": code, "ts": int(time.monotonic())}, block=True)
 
 
 def read_pairing_code(params: Params | None = None) -> str | None:
@@ -174,7 +174,12 @@ def pairing_requested(params: Params | None = None) -> bool:
     return False
   data = params.get(PAIRING_CODE_KEY)
   ts = data.get("ts") if isinstance(data, dict) else None
-  if not isinstance(ts, (int, float)) or time.time() - ts > PAIRING_WINDOW_S:  # noqa: TID251
+  if not isinstance(ts, (int, float)):
+    clear_pairing_request(params)
+    return False
+  age = time.monotonic() - ts
+  # Negative age = armed before the last reboot (monotonic restarts at boot).
+  if age < 0 or age > PAIRING_WINDOW_S:
     clear_pairing_request(params)
     return False
   return True

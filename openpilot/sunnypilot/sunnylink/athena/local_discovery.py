@@ -203,7 +203,7 @@ class LocalDiscovery(threading.Thread):
     payload = {
       "endpoint": beacon.endpoint,
       "app_id": beacon.app_id,
-      "ts": int(time.time()),  # noqa: TID251
+      "ts": int(time.monotonic()),
     }
     try:
       self.params.put(DISCOVERED_APP_KEY, payload, block=True)
@@ -254,7 +254,8 @@ def latest_discovered_app(params: Params | None = None,
     return None
   if not endpoint or ts <= 0:
     return None
-  age = time.time() - ts  # noqa: TID251 -- wall-clock epoch written by the listener
-  if age > fresh_s:
+  age = time.monotonic() - ts
+  # Negative age = written before the last reboot (monotonic restarts at boot).
+  if age < 0 or age > fresh_s:
     return None
   return endpoint, max(0, int(age))

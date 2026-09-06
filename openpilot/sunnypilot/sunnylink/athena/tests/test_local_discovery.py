@@ -126,7 +126,7 @@ class TestLocalDiscovery(OpenpilotTestCase):
       assert data, "discovered-app status never written"
       assert data["endpoint"] == "ws://127.0.0.1:9000"
       assert data["app_id"] == "app-9"
-      assert abs(int(data["ts"]) - int(time.time())) < 5  # noqa: TID251 -- wall-clock ts
+      assert abs(int(data["ts"]) - int(time.monotonic())) < 5
     finally:
       discovery.stop()
       discovery.join(timeout=2)
@@ -272,7 +272,7 @@ class TestLocalDiscovery(OpenpilotTestCase):
     clear_pairing_request(self.params)
     self.params.put(DISCOVERED_APP_KEY,
                     {"endpoint": "ws://10.0.0.9:8443", "app_id": "old",
-                     "ts": int(time.time())},  # noqa: TID251 -- wall-clock ts
+                     "ts": int(time.monotonic())},
                     block=True)
     listener, sender, addr = self._make_pair()
     discovery = LocalDiscovery(self.params, sock=listener)
@@ -322,7 +322,7 @@ class TestLatestDiscoveredApp(OpenpilotTestCase):
     assert latest_discovered_app(self.params) is None
 
   def test_fresh_beacon(self):
-    self._put(int(time.time()))  # noqa: TID251 -- wall-clock ts
+    self._put(int(time.monotonic()))
     info = latest_discovered_app(self.params)
     assert info is not None
     endpoint, age = info
@@ -330,7 +330,13 @@ class TestLatestDiscoveredApp(OpenpilotTestCase):
     assert 0 <= age < 5
 
   def test_stale_beacon(self):
-    self._put(int(time.time()) - LOCAL_BEACON_FRESH_S - 10)  # noqa: TID251 -- wall-clock ts
+    self._put(int(time.monotonic()) - LOCAL_BEACON_FRESH_S - 10)
+    assert latest_discovered_app(self.params) is None
+
+  def test_reboot_stale_beacon(self):
+    """Monotonic restarts at boot — a future-dated ts from before a reboot
+    must read as stale, not fresh."""
+    self._put(int(time.monotonic()) + 1000)
     assert latest_discovered_app(self.params) is None
 
   def test_corrupt_status(self):
