@@ -26,10 +26,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   update_local_app_endpoint,
 )
 
-# App beacons older than this are stale (the app left the network). Shared by
-# sunnylinkd (connection selection) and the settings UI ("app discovered" row).
 LOCAL_BEACON_FRESH_S = 30
-
 
 @dataclass
 class AppBeacon:
@@ -48,10 +45,7 @@ def parse_beacon(raw: str | bytes, source_ip: str = "") -> AppBeacon | None:
   Parse one UDP beacon line from the app.
 
   Wire format: `SUNNYLINK1 {"v":1,"role":"app","app_id":"<uuid>","ws_port":8443}`
-
-  Returns None for anything that is not a well-formed v1 app beacon (device
-  beacons from other participants, garbage, other protocols). Discovery is
-  unauthenticated phonebook data — ids + addresses only, no secrets.
+  Returns None for anything else. Beacons carry ids + addresses only — no secrets.
   """
   if isinstance(raw, bytes):
     raw = raw.decode("utf-8", errors="replace")
@@ -77,24 +71,14 @@ def parse_beacon(raw: str | bytes, source_ip: str = "") -> AppBeacon | None:
 
 class LocalDiscovery(threading.Thread):
   """
-  The device-side half of LAN discovery: a passive stdlib UDP listener.
+  Passive UDP listener
 
-  The APP drives discovery — it periodically broadcasts its beacon to
-  <broadcast>:53133/udp. This thread listens on the same port:
-
-  - While a pairing window is armed (the on-device "Pair App" button), the
-    most recent app endpoint is tracked so the daemon can offer pairing to a
-    NEW app, and it is mirrored into a status param for the settings UI.
-    Outside a window no beacons are processed for pairing (nothing is written
-    and [latest_endpoint] stays empty), so a paired device can never be
-    redirected by a random LAN beacon and an unpaired device never auto-offers
-    pairing on its own.
-  - INDEPENDENT of any window: a beacon from an app that is ALREADY in the
-    paired registry refreshes the app's cached endpoint (IPs are not identity
-    — the app can move between networks). The daemon is notified via
-    [paired_refresh_cb] when the address actually changes.
-
-  No new dependencies: stdlib `socket` only.
+  - While a pairing window is armed: track the freshest app beacon so the
+    daemon can offer pairing to a NEW app, and mirror it into a status param
+    for the settings UI.
+  - Independently of any window: a beacon from an app ALREADY in the paired
+    registry refreshes its cached endpoint — IPs are not identity, the app can
+    move between networks.
   """
 
   def __init__(self, params: Params | None = None, port: int = SUNNYLINK_LOCAL_UDP_PORT,
@@ -103,30 +87,16 @@ class LocalDiscovery(threading.Thread):
     super().__init__(name="local_discovery_listener", daemon=True)
     self.params = params or Params()
     self.port = port
-    # Test seam: inject a bound UDP socket. None → bind the fixed LAN port.
     self._sock = sock
-    # Invoked (from the listener thread) on every fresh beacon from an
-    # already-PAIRED app — whether the endpoint changed (the app moved
-    # networks) or stayed the same (the app's server came back up). The daemon
-    # clears stale dial backoffs and re-selects to the app promptly
-    # (see sunnylinkd._handle_paired_refresh); the callback guards against
-    # churn itself.
     self.paired_refresh_cb = paired_refresh_cb
     self._latest_endpoint: str | None = None
     self._latest_app_id: str | None = None
     self._last_seen_monotonic: float = 0.0
-    # Paired-app beacon state: the freshest beacon heard from an app that is
-    # ALREADY in the registry. IPs are not identity — the app can move between
-    # networks, so sunnylinkd's connection selection prefers this over the
-    # (possibly stale) endpoint stored at pairing time.
     self._latest_paired_endpoint: str | None = None
     self._latest_paired_app_id: str | None = None
     self._last_paired_seen_monotonic: float = 0.0
     self._lock = threading.Lock()
     self._stop_event = threading.Event()
-    # Status-param bookkeeping: reflect the app beacon in `SunnylinkLocalDiscoveredApp`
-    # (for the settings UI, which runs in another process) but only write on change
-    # or at most every [write_interval_s] so beacon chatter doesn't churn the store.
     self.write_interval_s = write_interval_s
     self._last_write_monotonic = 0.0
     self._last_written_endpoint: str | None = None
@@ -159,8 +129,7 @@ class LocalDiscovery(threading.Thread):
       return time.monotonic() - self._last_seen_monotonic
 
   def latest_paired_endpoint(self) -> str | None:
-    """The freshest beacon endpoint announced by an ALREADY-PAIRED app (None
-    until one is heard — pairing-offer beacons do not populate this)."""
+    """The freshest beacon endpoint announced by an ALREADY-PAIRED."""
     with self._lock:
       return self._latest_paired_endpoint
 
@@ -181,9 +150,6 @@ class LocalDiscovery(threading.Thread):
     if beacon is None:
       return
     if pairing_requested(self.params):
-      # Discovery runs only while a pairing window is armed: track the beacon
-      # so the daemon can offer pairing to a NEW app, and mirror it into the
-      # status param the settings UI reads.
       with self._lock:
         self._latest_endpoint = beacon.endpoint
         self._latest_app_id = beacon.app_id
@@ -191,35 +157,16 @@ class LocalDiscovery(threading.Thread):
       self._write_discovered_param(beacon)
       cloudlog.debug(f"local_discovery.app_found {beacon.app_id} at {beacon.endpoint}")
     else:
-      # Pairing is button-driven: outside a window, beacons are ignored for
-      # pairing purposes (and any stale status left behind is dropped).
       with self._lock:
         self._latest_endpoint = None
         self._latest_app_id = None
         self._last_seen_monotonic = 0.0
       self._clear_discovered_param()
-    # Independent of the window: a beacon from an ALREADY-PAIRED app re-learns
-    # its cached endpoint (the app's IP can change between networks — identity
-    # is the app_id, not the address).
     self._maybe_refresh_paired_app(beacon)
 
   def _maybe_refresh_paired_app(self, beacon: AppBeacon) -> None:
-    """Refresh a paired app's registry endpoint from its beacon.
+    """Refresh a paired app's registry endpoint from its beacon."""
 
-    Always tracks the freshest paired-app beacon in memory (sunnylinkd's
-    connection selection prefers it over the stored endpoint), and writes the
-    registry only when the endpoint actually changed — so 5s beacon chatter
-    never churns params.
-
-    [paired_refresh_cb] fires on EVERY fresh beacon from a paired app (not
-    only on address change). The app's beacon proves its server is up right
-    now, so the daemon can react to "the app came back" — clearing stale dial
-    backoffs and dropping the cloud link to re-select local — which is how a
-    device reconnects locally within seconds of the app being (re)opened even
-    when the app's IP never changed. The callback itself owns the churn guard
-    (a fresh-beacon re-selection is attempted at most once per staleness
-    window), so 5s beacon chatter cannot thrash the connection loop.
-    """
     if not any(app.app_id == beacon.app_id for app in get_local_apps(self.params)):
       return
     with self._lock:
@@ -235,7 +182,6 @@ class LocalDiscovery(threading.Thread):
         cloudlog.exception("local_discovery.paired_refresh_cb.exception")
 
   def _clear_discovered_param(self) -> None:
-    """Drop the stale "discovered" status once the device is paired."""
     if self._discovered_cleared:
       return
     self._discovered_cleared = True
@@ -257,14 +203,9 @@ class LocalDiscovery(threading.Thread):
     payload = {
       "endpoint": beacon.endpoint,
       "app_id": beacon.app_id,
-      # Wall-clock epoch is intentional — this param is read by the settings UI
-      # in another process, so a monotonic (process-local) clock won't do.
       "ts": int(time.time()),  # noqa: TID251
     }
     try:
-      # block=True: the settings UI (another process) must see this promptly.
-      # Writes are throttled to every [write_interval_s] at most, so this is
-      # at most a couple of disk writes a minute while an app is announcing.
       self.params.put(DISCOVERED_APP_KEY, payload, block=True)
     except Exception:
       cloudlog.exception("local_discovery.param_write.exception")
@@ -302,14 +243,6 @@ class LocalDiscovery(threading.Thread):
 
 def latest_discovered_app(params: Params | None = None,
                           fresh_s: float = LOCAL_BEACON_FRESH_S) -> tuple[str, int] | None:
-  """
-  The endpoint of the app most recently announcing itself — provided its beacon
-  is still fresh — read from the status param the discovery listener writes.
-
-  Returns (endpoint, age_s) or None when nothing has been heard (or the last
-  beacon went stale). Runs in any process (e.g. the settings UI) without
-  touching the UDP socket; pairing state is the caller's concern.
-  """
   params = params or Params()
   data = params.get(DISCOVERED_APP_KEY)
   if not isinstance(data, dict):

@@ -36,8 +36,6 @@ from openpilot.system.ui.widgets.list_view import dual_button_item
 from openpilot.system.ui.widgets.network import NavButton
 from openpilot.system.ui.widgets.scroller_tici import Scroller, LineSeparator
 
-# Max paired-app rows rendered in the local-app sub-panel (the registry itself
-# is unbounded — more apps keep working, just not listed). One row per app.
 MAX_LOCAL_APPS = 4
 
 # Read-only value colors used by the local-mode rows.
@@ -214,12 +212,6 @@ class SunnylinkLayout(Widget):
     self._backup_btn.set_button_style(ButtonStyle.NORMAL)
     self._restore_btn.set_button_style(ButtonStyle.PRIMARY)
 
-    # --- Local (LAN) mode ------------------------------------------------
-    # All local-mode management lives behind the "Mobile App" row, which opens
-    # a sub-panel (SunnylinkLocalAppLayout): "Pair App" there arms a 5-minute
-    # pairing window and shows the code in a dialog; paired apps are listed
-    # with an UNPAIR button. The main list stays clean — one row, no codes,
-    # no per-app rows.
     self._mobile_app_btn = button_item_sp(
       title=tr("Mobile App"),
       button_text=tr("OPEN"),
@@ -411,10 +403,6 @@ class SunnylinkLayout(Widget):
 
 
 class SunnylinkLocalAppLayout(Widget):
-  """Sub-panel reached from the "Mobile App" row: pair a new app or unpair
-  existing ones. Pushed as a full-screen widget on top of the sunnylink panel;
-  the paired-app rows refresh every frame so a freshly-paired app appears as
-  soon as its dialog closes."""
 
   def __init__(self):
     super().__init__()
@@ -505,13 +493,6 @@ class SunnylinkLocalAppLayout(Widget):
 
 
 class SunnylinkLocalPairingDialog(Widget):
-  """Full-screen dialog showing the 6-digit pairing code.
-
-  Opening it arms the pairing window (fresh code, ~5 min). Closing it cancels
-  pairing (clears the window). When the app completes pairing, the window is
-  already closed by pairLocalApp and the dialog pops itself so the new paired
-  device appears in the sub-panel list.
-  """
 
   def __init__(self):
     super().__init__()
@@ -526,11 +507,9 @@ class SunnylinkLocalPairingDialog(Widget):
 
   def _update_state(self):
     if len(get_local_apps()) > self._apps_before:
-      # Paired — the window was already cleared by pairLocalApp. Just close.
-      gui_app.pop_widget()
+      gui_app.pop_widget()  # paired — window already cleared
     elif not pairing_requested():
-      # Window expired (~5 min) without pairing — close (nothing to cancel).
-      gui_app.pop_widget()
+      gui_app.pop_widget()  # window expired
 
   def _render(self, rect) -> int:
     rl.clear_background(rl.Color(224, 224, 224, 255))
@@ -540,20 +519,17 @@ class SunnylinkLocalPairingDialog(Widget):
                                 rect.width - 2 * margin, rect.height - 2 * margin)
     y = content_rect.y
 
-    # Close button
     close_size = 80
     pad = 20
     close_rect = rl.Rectangle(content_rect.x - pad, y - pad, close_size + pad * 2, close_size + pad * 2)
     self._close_btn.render(close_rect)
     y += close_size + 40
 
-    # Title
     title_font = gui_app.font(FontWeight.NORMAL)
     title_wrapped = wrap_text(title_font, tr("Pair with mobile app"), 75, int(content_rect.width))
     rl.draw_text_ex(title_font, "\n".join(title_wrapped), rl.Vector2(content_rect.x, y), 75, 0.0, rl.BLACK)
     y += len(title_wrapped) * 75 + 40
 
-    # The code — big and centered
     code = read_pairing_code() or "—"
     code_font = gui_app.font(FontWeight.BOLD)
     code_size = measure_text_cached(code_font, code, 110)
@@ -561,14 +537,12 @@ class SunnylinkLocalPairingDialog(Widget):
                     110, 0.0, rl.BLACK)
     y += 170
 
-    # Hint
     hint_font = gui_app.font(FontWeight.NORMAL)
     hint_wrapped = wrap_text(hint_font, tr("Enter this code in the sunnylink app on your phone."), 45,
                              int(content_rect.width))
     rl.draw_text_ex(hint_font, "\n".join(hint_wrapped), rl.Vector2(content_rect.x, y), 45, 0.0, rl.BLACK)
     y += len(hint_wrapped) * 45 + 30
 
-    # Discovery status
     discovered = latest_discovered_app()
     if discovered is not None:
       endpoint, age = discovered

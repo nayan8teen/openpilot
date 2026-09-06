@@ -32,8 +32,6 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets.scroller import NavScroller
 
-# Max paired-app rows rendered in the local-app sub-panel (the registry itself
-# is unbounded — more apps keep working, just not listed).
 MAX_LOCAL_APPS = 4
 
 class SunnylinkInfo(Widget):
@@ -88,9 +86,6 @@ class SunnylinkLayoutMici(NavScroller):
     self._sunnylink_uploader_toggle = BigToggle(text=tr("sunnylink uploader"), initial_state=False,
                                                 toggle_callback=self._sunnylink_uploader_callback)
 
-    # Local (LAN) mode — all management lives behind the "mobile app" button,
-    # which opens a sub-panel: "pair app" there arms a 5-minute window and
-    # shows the code in a dialog; paired apps are listed with unpair actions.
     self._mobile_app_btn = BigButton(tr("mobile app"), "")
     self._mobile_app_btn.set_click_callback(lambda: gui_app.push_widget(LocalAppsPanelMici()))
 
@@ -280,9 +275,6 @@ class SunnylinkPairBigButton(BigButton):
 
 
 class LocalAppsPanelMici(NavScroller):
-  """Sub-panel reached from the "mobile app" button: pair a new app or unpair
-  existing ones. Pushed on the nav stack (swipe down to go back); the paired
-  buttons refresh every frame so a freshly-paired app appears immediately."""
 
   def __init__(self):
     super().__init__()
@@ -326,13 +318,6 @@ class LocalAppsPanelMici(NavScroller):
 
 
 class LocalPairingCodeDialogMici(BigDialogBase):
-  """Full-screen dialog showing the 6-digit pairing code.
-
-  Opening it arms the pairing window (fresh code, ~5 min). Swiping it away
-  cancels pairing (clears the window). When the app completes pairing, the
-  window is already closed by pairLocalApp and the dialog dismisses itself so
-  the new paired device shows in the sub-panel list.
-  """
 
   def __init__(self):
     super().__init__()
@@ -356,11 +341,9 @@ class LocalPairingCodeDialogMici(BigDialogBase):
     if self.is_dismissing:
       return
     if len(get_local_apps()) > self._apps_before:
-      # Paired — the window was already cleared by pairLocalApp. Just close.
-      self.dismiss()
+      self.dismiss()  # paired — window already cleared
     elif not pairing_requested():
-      # Window expired (~5 min) without pairing — close (nothing to cancel).
-      self.dismiss()
+      self.dismiss()  # window expired
 
   def _render(self, _):
     self._code_label.set_text(read_pairing_code() or "—")

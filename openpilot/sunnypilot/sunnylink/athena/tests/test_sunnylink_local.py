@@ -29,8 +29,8 @@ class FakePairingWs:
     self.closed = False
 
   def recv(self):
-    # Mirrors a real socket: blocks up to ~0.2s, then raises a timeout so the
-    # pairing session's deadline loop can make progress on an idle connection.
+    # Block briefly, then raise — mirrors a real socket so the session's
+    # deadline loop can progress on an idle connection.
     try:
       item = self.inbox.get(timeout=0.2)
     except queue.Empty:
@@ -243,9 +243,8 @@ class TestConnectionSelection(OpenpilotTestCase):
     assert (uri, kind) == ("ws://10.0.0.9:8443", "pairing_offer")
 
   def test_armed_window_never_dials_paired_app_beacon(self, mocker):
-    """While armed, a beacon from an already-paired app is NOT a pairing
-    offer (paired endpoints are skipped too — the window targets the NEW app,
-    so the loop waits rather than re-dialing the existing app)."""
+    """While armed, a beacon from an already-paired app is not a pairing
+    offer — the window targets only the new app."""
     apps = [LocalApp(app_id="app-a", endpoint="ws://10.0.0.2:8443")]
     mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
@@ -272,9 +271,8 @@ class TestConnectionSelection(OpenpilotTestCase):
     assert (uri, kind) == ("ws://10.0.0.2:8443", "paired_local")
 
   def test_fresh_paired_beacon_preferred_over_stored_endpoint(self, mocker):
-    """A paired app's FRESH beacon is the most current truth — its IP can
-    change between networks, so selection dials the beacon address over the
-    (possibly stale) endpoint stored at pairing time."""
+    """A fresh paired beacon beats the stored endpoint — IPs change between
+    networks."""
     apps = [LocalApp(app_id="a", endpoint="ws://10.0.0.2:8443")]
     mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
@@ -284,8 +282,8 @@ class TestConnectionSelection(OpenpilotTestCase):
     assert (uri, kind) == ("ws://10.0.0.77:8443", "paired_local")
 
   def test_stale_paired_beacon_ignored(self, mocker):
-    """A paired-app beacon older than the freshness window no longer counts —
-    fall back to the stored endpoint (the app may have left the network)."""
+    """Beacons older than the freshness window don't count — fall back to the
+    stored endpoint."""
     apps = [LocalApp(app_id="a", endpoint="ws://10.0.0.2:8443")]
     mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
@@ -295,8 +293,7 @@ class TestConnectionSelection(OpenpilotTestCase):
     assert (uri, kind) == ("ws://10.0.0.2:8443", "paired_local")
 
   def test_fresh_paired_beacon_of_unknown_app_ignored(self, mocker):
-    """A fresh beacon whose app_id is NOT in the registry is not a paired
-    selection candidate (outside a window it is ignored entirely)."""
+    """A fresh beacon from an app not in the registry is not a candidate."""
     apps = [LocalApp(app_id="a", endpoint="ws://10.0.0.2:8443")]
     mocker.patch.object(sunnylinkd, "pairing_requested", return_value=False)
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=apps)
@@ -326,8 +323,8 @@ class TestPairedRefresh(OpenpilotTestCase):
     return AppBeacon(app_id=app_id, ws_port=8443, source_ip=source_ip)
 
   def test_closes_cloud_connection_and_clears_stale_backoffs(self, mocker):
-    """On the cloud link, a paired app announcing a NEW endpoint forces a
-    prompt re-selection (the loop re-picks and dials the fresh address)."""
+    """On the cloud link, a paired app's fresh beacon forces a prompt
+    re-selection to it."""
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=self._apps())
     mocker.patch.object(sunnylinkd, "_active_local_endpoint", None)  # on cloud
     mocker.patch.object(sunnylinkd, "_active_ws", FakePairingWs())
@@ -351,8 +348,7 @@ class TestPairedRefresh(OpenpilotTestCase):
     assert not ws.closed
 
   def test_noop_while_serving_another_local_app(self, mocker):
-    """Connected to another app that is working: no forced switch (the natural
-    reconnect cycle re-picks, and selection prefers the fresh beacon)."""
+    """Connected to another local app that works — no forced switch."""
     mocker.patch.object(sunnylinkd, "get_local_apps", return_value=self._apps())
     mocker.patch.object(sunnylinkd, "_active_local_endpoint", "ws://10.0.0.9:8443")
     ws = FakePairingWs()
@@ -390,8 +386,8 @@ class TestPairedRefresh(OpenpilotTestCase):
 
 class TestPairingWatchdog(OpenpilotTestCase):
   def test_closes_connection_and_clears_backoffs_when_armed(self, mocker):
-    """Arming the window mid-session forces re-selection: the live connection
-    is closed and local backoffs cleared so the loop dials the new app."""
+    """Arming the window mid-session closes the live connection and clears
+    backoffs so the loop dials the new app."""
     mocker.patch.object(sunnylinkd, "pairing_requested", return_value=True)
     ws = FakePairingWs()
     backoffs = {"ws://10.0.0.2:8443": time.monotonic() + 9999}

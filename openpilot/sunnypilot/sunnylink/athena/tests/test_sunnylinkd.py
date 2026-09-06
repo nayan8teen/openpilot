@@ -93,8 +93,8 @@ class TestHandlePairedRefresh(OpenpilotTestCase):
     return AppBeacon(app_id=self.APP_ID, ws_port=8443, source_ip="192.168.1.50")
 
   def test_fresh_beacon_clears_backoff_and_forces_reconnect_from_cloud(self):
-    """On the cloud link with a stale dial backoff: the beacon clears the
-    backoff and closes the active ws so the loop re-selects local promptly."""
+    """On the cloud link: the beacon clears the stale backoff and closes the
+    ws so the loop re-selects local."""
     self.backoffs[self.ENDPOINT] = time.monotonic() + 300
     closed = []
     class FakeWs:
@@ -110,9 +110,8 @@ class TestHandlePairedRefresh(OpenpilotTestCase):
     assert self.force_attempts[self.ENDPOINT] > 0
 
   def test_reconnect_guarded_to_once_per_staleness_window(self):
-    """A failed forced dial must not thrash the cloud link: repeated fresh
-    beacons for the same endpoint force a re-selection at most once per
-    LOCAL_BEACON_FRESH_S."""
+    """Repeated fresh beacons force a re-selection at most once per
+    LOCAL_BEACON_FRESH_S — a failed dial must not thrash the cloud link."""
     closed = []
     class FakeWs:
       def close(self):
@@ -144,8 +143,7 @@ class TestHandlePairedRefresh(OpenpilotTestCase):
     assert self.ENDPOINT not in self.backoffs
 
   def test_serving_another_local_app_is_noop(self):
-    """Connected to a DIFFERENT local app — no forced switch (the natural
-    reconnect cycle re-picks, and selection prefers the fresh beacon)."""
+    """Connected to a DIFFERENT local app — no forced switch."""
     closed = []
     class FakeWs:
       def close(self):

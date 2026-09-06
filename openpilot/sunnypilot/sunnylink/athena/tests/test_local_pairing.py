@@ -123,8 +123,7 @@ class TestLocalAppsRegistry(OpenpilotTestCase):
     apps = get_local_apps(self.params)
     assert [a.app_id for a in apps] == ["app-1", "app-2"]
 
-    # Re-pairing the same app updates in place (no duplicates; the updated
-    # entry moves to the end, matching the "most recent pairing wins" order).
+    # Re-pairing updates in place; the updated entry moves to the end (most recent wins).
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.9:8443", app_name="Pixel 9"), self.params)
     apps = get_local_apps(self.params)
     assert len(apps) == 2
@@ -147,8 +146,7 @@ class TestLocalAppsRegistry(OpenpilotTestCase):
     assert not remove_local_app("missing", self.params)
 
   def test_update_local_app_endpoint(self):
-    """A paired app's beacon refreshes its cached endpoint (the app's IP can
-    change between networks) without touching identity fields."""
+    """Beacon refreshes the cached endpoint without touching identity fields."""
     add_local_app(self.app(), self.params)
     assert update_local_app_endpoint("app-1", "ws://10.0.0.99:8443", self.params)
     apps = get_local_apps(self.params)
@@ -216,8 +214,7 @@ class TestLocalAppsRegistry(OpenpilotTestCase):
     assert not is_locally_paired(self.params)
 
   def test_ignores_corrupt_registry(self):
-    # Legacy STRING-era value (raw JSON text, not a JSON document) or external
-    # corruption — must not crash, treated as unpaired.
+    # Legacy STRING-era value or external corruption — treated as unpaired, no crash.
     _put_raw(self.params, LOCAL_APPS_KEY, b"not-json{")
     assert get_local_apps(self.params) == []
     assert not is_locally_paired(self.params)

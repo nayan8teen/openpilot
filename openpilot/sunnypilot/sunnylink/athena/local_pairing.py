@@ -17,37 +17,19 @@ from collections.abc import Callable
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 
-# Fixed LAN ports shared with the sunnylink mobile app (the app is the local
-# "backend": it broadcasts UDP beacons and runs the WebSocket server the device
-# dials). Do not change without a coordinated app update.
 SUNNYLINK_LOCAL_UDP_PORT = 53133
 SUNNYLINK_LOCAL_WS_PORT = 8443
 
 LOCAL_APPS_KEY = "SunnylinkLocalApps"
 PAIRING_CODE_KEY = "SunnylinkLocalPairingCode"
-# Set True by the on-device "Pair App" button while a pairing window is armed.
-# Discovery, the pairing code, and the pairing-offer dial run ONLY inside this
-# window (pairing is an explicit device-side action, never an auto-offer).
 PAIRING_REQUEST_KEY = "SunnylinkLocalPairingRequest"
-# Status written by the discovery listener (most recent app beacon) so the
-# on-device settings UI can show "app discovered" across processes.
 DISCOVERED_APP_KEY = "SunnylinkLocalDiscoveredApp"
 
-# 6 NUMERIC digits — the mobile app's pairing-code field accepts digits only
-# (it filters non-digits and requires exactly 6, see LocalModeScreen). The
-# alphabet must stay numeric; 10^6 combinations over the 5-minute window is
-# plenty for a LAN pairing handshake.
 PAIRING_CODE_LENGTH = 6
 PAIRING_CODE_ALPHABET = "0123456789"
 DEFAULT_CODE_ROTATION_S = 10 * 60  # re-roll the displayed code every 10 min
-# How long an armed pairing window stays open before it self-expires (and the
-# request flag is dropped). The device-side "Pair App" action is a deliberate
-# short-lived window; after it lapses the device returns to its normal
-# connection selection (paired local endpoints / cloud).
 PAIRING_WINDOW_S = 5 * 60
 
-# Beacons carry the app's identity + WS port. The device itself never
-# broadcasts — discovery lives on the app side (it announces, we listen).
 BEACON_PREFIX = "SUNNYLINK1"
 
 
@@ -57,9 +39,6 @@ class LocalApp:
   app_id: str
   endpoint: str
   app_name: str = ""
-  # The app's friendly name, set from the app itself (paired-app button label
-  # precedence: alias → app_name → app_id). Optional — legacy entries pair
-  # without it and fall back to app_name.
   alias: str = ""
   paired_at: int = 0  # epoch seconds
 
@@ -75,13 +54,10 @@ class LocalApp:
 
 
 def local_app_display_name(app: LocalApp) -> str:
-  """The label for a paired app in the device UI: the app-set alias wins,
-  then the app's own name, then its id (the id always exists)."""
   return app.alias or app.app_name or app.app_id
 
 
 def is_locally_paired(params: Params | None = None) -> bool:
-  """True when at least one app is paired (local mode is available)."""
   return len(get_local_apps(params)) > 0
 
 
@@ -103,7 +79,7 @@ def _save_local_apps(apps: list[LocalApp], params: Params | None = None) -> None
 
 
 def add_local_app(app: LocalApp, params: Params | None = None) -> None:
-  """Pair an app: append (or update by app_id) and persist."""
+  """Append (or update by app_id) and persist."""
   if not app.paired_at:
     app.paired_at = int(datetime.now(UTC).replace(tzinfo=None).timestamp())
   apps = [existing for existing in get_local_apps(params) if existing.app_id != app.app_id]
@@ -113,14 +89,7 @@ def add_local_app(app: LocalApp, params: Params | None = None) -> None:
 
 
 def update_local_app_endpoint(app_id: str, endpoint: str, params: Params | None = None) -> bool:
-  """
-  Refresh a PAIRED app's cached LAN endpoint from its beacon.
-
-  IPs are not identity: the app can move between networks, so the discovery
-  listener re-learns its address from the app's own beacon. The app's
-  app_name/alias/paired_at are preserved; returns True only when the endpoint
-  actually changed (callers can then react — e.g. force a re-selection).
-  """
+  """Refresh a PAIRED app's cached endpoint from its beacon."""
   apps = get_local_apps(params)
   for i, app in enumerate(apps):
     if app.app_id != app_id or app.endpoint == endpoint:
@@ -134,10 +103,6 @@ def update_local_app_endpoint(app_id: str, endpoint: str, params: Params | None 
 
 
 def set_local_app_alias(app_id: str, alias: str, params: Params | None = None) -> bool:
-  """
-  Update a PAIRED app's alias (the name the device shows for it, set from the
-  app itself). Idempotent — an unknown app_id is a no-op that returns False.
-  """
   apps = get_local_apps(params)
   for i, app in enumerate(apps):
     if app.app_id != app_id:
@@ -164,19 +129,18 @@ def remove_local_app(app_id: str, params: Params | None = None) -> bool:
 
 
 def remove_all_local_apps(params: Params | None = None) -> None:
-  """Unpair every app (the device-side "forget local apps" action)."""
+  """Unpair every app."""
   _save_local_apps([], params)
   cloudlog.event("local_pairing.all_apps_unpaired")
 
 
 def generate_pairing_code() -> str:
-  """A 6-digit numeric pairing code (the mobile app's code field is digits-only)."""
+  """A 6-digit numeric pairing code."""
   return "".join(secrets.choice(PAIRING_CODE_ALPHABET) for _ in range(PAIRING_CODE_LENGTH))
 
 
 def _write_pairing_code(code: str, params: Params) -> None:
-  """Persist the code together with its armed-at timestamp (the pairing window
-  is derived from that timestamp, so the code and window always agree)."""
+  """Persist the code with its armed-at timestamp — the window is derived from it."""
   params.put(PAIRING_CODE_KEY, {"code": code, "ts": int(time.time())}, block=True)  # noqa: TID251
 
 
@@ -191,9 +155,7 @@ def read_pairing_code(params: Params | None = None) -> str | None:
 
 
 def get_pairing_code(params: Params | None = None) -> str:
-  """The current displayed pairing code, generating (and persisting) one on
-  first use. A code is only meaningful inside a pairing window — `arm_pairing`
-  is the button-driven path that always rolls a fresh one."""
+  """The displayed pairing code, generating and persisting one on first use."""
   params = params or Params()
   code = read_pairing_code(params)
   if code is None:
@@ -203,16 +165,10 @@ def get_pairing_code(params: Params | None = None) -> str:
 
 
 def pairing_requested(params: Params | None = None) -> bool:
-  """
-  True while the on-device "Pair App" window is armed and still fresh.
+  """True while the pairing window is armed and fresh.
 
-  The window is self-expiring: when the request flag is set but the pairing
-  code (which carries the armed-at timestamp) is missing or older than
-  [PAIRING_WINDOW_S], the flag is dropped and False is returned. Every caller
-  (the discovery listener, sunnylinkd's connection selection, the settings UI
-  row visibility) consults this, so the window closes itself wherever it is
-  next read.
-  """
+  Self-expiring: if the code (which carries the armed-at timestamp) is missing
+  or older than PAIRING_WINDOW_S, the flag is dropped here."""
   params = params or Params()
   if not params.get_bool(PAIRING_REQUEST_KEY):
     return False
@@ -225,14 +181,10 @@ def pairing_requested(params: Params | None = None) -> bool:
 
 
 def arm_pairing(params: Params | None = None) -> str:
-  """
-  Arm a pairing window and return the code the user types into the app.
+  """Arm a pairing window and return the code for the app.
 
-  Always rolls a fresh code (and a fresh window timestamp); the flag is set
-  only after the code is persisted, so `pairing_requested` never observes an
-  armed flag without a valid code. Re-arming after a timeout or an unpair just
-  starts a new window.
-  """
+  Rolls a fresh code first, then sets the flag, so pairing_requested never
+  sees an armed flag without a valid code."""
   params = params or Params()
   code = generate_pairing_code()
   _write_pairing_code(code, params)
@@ -257,15 +209,8 @@ def verify_pairing_code(code: str, params: Params | None = None) -> bool:
 
 
 class PairingCodeRotator(threading.Thread):
-  """
-  Keeps the on-screen pairing code fresh while a pairing window is armed.
-
-  - Immediately on start, and every [rotation_s] after: re-roll the code while
-    a pairing window is armed (fresh code + fresh window timestamp).
-  - No window armed: the code is cleared and the thread idles. Pairing is an
-    explicit device-side action (the "Pair App" button arms the window), so
-    the code is never generated on its own.
-  """
+  """Re-roll the displayed code while a pairing window is armed; clear it
+  otherwise — the code is never generated outside a window."""
 
   def __init__(self, params: Params | None = None, rotation_s: float = DEFAULT_CODE_ROTATION_S,
                stop_event: threading.Event | None = None, tick_cb: Callable[[], None] | None = None):
@@ -277,8 +222,7 @@ class PairingCodeRotator(threading.Thread):
     self.tick_cb = tick_cb
 
   def rotate(self) -> None:
-    """One rotation pass: re-roll the code while the window is armed, clear it
-    (and the window, if it expired) otherwise."""
+    """Re-roll the code while the window is armed, clear it otherwise."""
     if pairing_requested(self.params):
       _write_pairing_code(generate_pairing_code(), self.params)
     else:
@@ -300,12 +244,9 @@ def format_endpoint(host: str, ws_port: int = SUNNYLINK_LOCAL_WS_PORT) -> str:
 
 
 def local_identity(params: Params | None = None) -> str:
-  """
-  Identity claim the device presents on LOCAL connections (the app's WebSocket
-  server). The comma `DongleId` is used — it always exists on comma hardware
-  (unlike `SunnylinkDongleId`, which is "UnregisteredDevice" until cloud
-  registration) and it is what the mobile app matches against the backend
-  device list (`comma_dongle_id`) to dedupe cloud + local entries.
-  """
+  """Identity claim on local connections. DongleId always exists on comma
+  hardware (SunnylinkDongleId is "UnregisteredDevice" until cloud
+  registration) and is what the app matches against the backend device list
+  to dedupe cloud + local entries."""
   params = params or Params()
   return params.get("DongleId") or params.get("HardwareSerial") or ""

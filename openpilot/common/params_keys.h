@@ -228,19 +228,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SunnylinkEnabled", {PERSISTENT, BOOL, "1"}},
     {"SunnylinkTempFault", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL, "0"}},
 
-    // Local (LAN) mode params — the sunnylink mobile app acts as the backend on the LAN.
-    // SunnylinkLocalApps: JSON list of paired apps [{app_id, app_name, endpoint, paired_at}].
     {"SunnylinkLocalApps", {PERSISTENT, JSON}},
-    // SunnylinkLocalPairingCode: rotating 6-digit code shown on the device screen for pairing,
-    // stored as a JSON document {"code": "..."}.
     {"SunnylinkLocalPairingCode", {CLEAR_ON_MANAGER_START, JSON}},
-    // SunnylinkLocalDiscoveredApp: JSON {endpoint, app_id, ts} of the most recent app beacon
-    // (only while a pairing window is armed). Written by the discovery listener for the
-    // settings UI; cleared on boot.
     {"SunnylinkLocalDiscoveredApp", {CLEAR_ON_MANAGER_START, JSON}},
-    // SunnylinkLocalPairingRequest: set True by the on-device "Pair App" button to arm a
-    // pairing window (discovery + code + pairing-offer dial run only while set). Cleared on
-    // pair success, window expiry (~5 min), or manager restart.
     {"SunnylinkLocalPairingRequest", {CLEAR_ON_MANAGER_START, BOOL}},
 
     // Backup Manager params

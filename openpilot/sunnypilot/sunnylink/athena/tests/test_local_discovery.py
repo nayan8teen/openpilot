@@ -133,8 +133,7 @@ class TestLocalDiscovery(OpenpilotTestCase):
       sender.close()
 
   def test_ignores_beacons_without_window(self):
-    """No pairing window armed → beacons are ignored entirely (even a device
-    with an empty registry never listens on its own; pairing is button-driven)."""
+    """No window armed → beacons ignored entirely (pairing is button-driven)."""
     listener, sender, addr = self._make_pair()
     discovery = LocalDiscovery(self.params, sock=listener)
     discovery.start()
@@ -149,8 +148,7 @@ class TestLocalDiscovery(OpenpilotTestCase):
       sender.close()
 
   def test_records_new_app_beacon_while_paired(self):
-    """A device already paired to one app still listens during a window — so a
-    SECOND app can be discovered and paired (multi-app support)."""
+    """A paired device still listens during a window, so a SECOND app can pair."""
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
     arm_pairing(self.params)
     listener, sender, addr = self._make_pair()
@@ -167,8 +165,7 @@ class TestLocalDiscovery(OpenpilotTestCase):
 
   def test_paired_beacon_refreshes_registry_outside_window(self):
     """A beacon from an ALREADY-PAIRED app updates its cached endpoint even
-    without a pairing window — the app's IP can change between networks, and
-    the registry must follow it (identity is the app_id, not the address)."""
+    without a window — IPs change; the app_id is the identity."""
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443",
                            app_name="Pixel"), self.params)
     listener, sender, addr = self._make_pair()
@@ -185,9 +182,9 @@ class TestLocalDiscovery(OpenpilotTestCase):
       apps = get_local_apps(self.params)
       assert len(apps) == 1
       assert apps[0].endpoint == "ws://127.0.0.1:8443"
-      assert apps[0].app_name == "Pixel"  # identity fields preserved
+      assert apps[0].app_name == "Pixel"  # untouched
       assert apps[0].paired_at > 0
-      # The in-memory paired-beacon state is exposed for connection selection.
+      # In-memory paired-beacon state drives connection selection.
       assert discovery.latest_paired_endpoint() == "ws://127.0.0.1:8443"
       assert discovery.latest_paired_app_id() == "app-1"
       assert discovery.latest_paired_seen_ago() is not None
@@ -216,11 +213,9 @@ class TestLocalDiscovery(OpenpilotTestCase):
       sender.close()
 
   def test_paired_beacon_fires_callback_even_without_change(self):
-    """The daemon is notified on EVERY fresh beacon from a paired app — not
-    only on address change. The beacon proves the app's server is up, so the
-    daemon can clear stale dial backoffs and re-select promptly when the app
-    is (re)opened on the same address. The registry itself is still written
-    only on change (no param churn)."""
+    """Callback fires on EVERY fresh beacon, not just on address change — a
+    beacon proves the app's server is up, so the daemon can re-select even on
+    the same address. The registry is still written only on change."""
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
     calls: list[str] = []
     listener, sender, addr = self._make_pair()
@@ -238,8 +233,7 @@ class TestLocalDiscovery(OpenpilotTestCase):
       time.sleep(0.1)
       sender.sendto(beacon("app-1"), addr)  # same address — still a fresh beacon
       time.sleep(0.2)
-      # Both beacons fired the callback (fresh app alive → re-evaluate), even
-      # though the second one changed nothing in the registry.
+      # Both beacons fired the callback even though the second changed nothing.
       assert calls == ["ws://127.0.0.1:8443", "ws://127.0.0.1:8443"]
       apps = get_local_apps(self.params)
       assert apps[0].endpoint == "ws://127.0.0.1:8443"
@@ -249,9 +243,8 @@ class TestLocalDiscovery(OpenpilotTestCase):
       sender.close()
 
   def test_paired_refresh_also_runs_while_window_armed(self):
-    """Paired-app endpoint refresh is orthogonal to the pairing window: an
-    armed window (pairing a NEW app) does not stop a paired app's beacon from
-    refreshing its address."""
+    """Endpoint refresh is orthogonal to the window — arming it doesn't stop
+    paired-app refreshes."""
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
     arm_pairing(self.params)
     listener, sender, addr = self._make_pair()
