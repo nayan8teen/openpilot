@@ -105,9 +105,12 @@ class LocalDiscovery(threading.Thread):
     self.port = port
     # Test seam: inject a bound UDP socket. None → bind the fixed LAN port.
     self._sock = sock
-    # Invoked (from the listener thread) when an already-PAIRED app's beacon
-    # announces a NEW endpoint — the daemon can then force a prompt
-    # re-selection to the fresh address (see sunnylinkd._handle_paired_refresh).
+    # Invoked (from the listener thread) on every fresh beacon from an
+    # already-PAIRED app — whether the endpoint changed (the app moved
+    # networks) or stayed the same (the app's server came back up). The daemon
+    # clears stale dial backoffs and re-selects to the app promptly
+    # (see sunnylinkd._handle_paired_refresh); the callback guards against
+    # churn itself.
     self.paired_refresh_cb = paired_refresh_cb
     self._latest_endpoint: str | None = None
     self._latest_app_id: str | None = None
@@ -206,8 +209,16 @@ class LocalDiscovery(threading.Thread):
     Always tracks the freshest paired-app beacon in memory (sunnylinkd's
     connection selection prefers it over the stored endpoint), and writes the
     registry only when the endpoint actually changed — so 5s beacon chatter
-    never churns params. On an actual change, [paired_refresh_cb] fires so the
-    daemon can re-select to the fresh address promptly.
+    never churns params.
+
+    [paired_refresh_cb] fires on EVERY fresh beacon from a paired app (not
+    only on address change). The app's beacon proves its server is up right
+    now, so the daemon can react to "the app came back" — clearing stale dial
+    backoffs and dropping the cloud link to re-select local — which is how a
+    device reconnects locally within seconds of the app being (re)opened even
+    when the app's IP never changed. The callback itself owns the churn guard
+    (a fresh-beacon re-selection is attempted at most once per staleness
+    window), so 5s beacon chatter cannot thrash the connection loop.
     """
     if not any(app.app_id == beacon.app_id for app in get_local_apps(self.params)):
       return
@@ -215,9 +226,8 @@ class LocalDiscovery(threading.Thread):
       self._latest_paired_endpoint = beacon.endpoint
       self._latest_paired_app_id = beacon.app_id
       self._last_paired_seen_monotonic = time.monotonic()
-    if not update_local_app_endpoint(beacon.app_id, beacon.endpoint, self.params):
-      return
-    cloudlog.debug(f"local_discovery.paired_refresh {beacon.app_id} -> {beacon.endpoint}")
+    if update_local_app_endpoint(beacon.app_id, beacon.endpoint, self.params):
+      cloudlog.debug(f"local_discovery.paired_refresh {beacon.app_id} -> {beacon.endpoint}")
     if self.paired_refresh_cb is not None:
       try:
         self.paired_refresh_cb(beacon)

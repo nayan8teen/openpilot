@@ -215,9 +215,12 @@ class TestLocalDiscovery(OpenpilotTestCase):
       discovery.join(timeout=2)
       sender.close()
 
-  def test_paired_refresh_callback_fires_only_on_change(self):
-    """The daemon is notified only when a paired app's endpoint actually
-    changes — repeated beacons from the same address must not churn anything."""
+  def test_paired_beacon_fires_callback_even_without_change(self):
+    """The daemon is notified on EVERY fresh beacon from a paired app — not
+    only on address change. The beacon proves the app's server is up, so the
+    daemon can clear stale dial backoffs and re-select promptly when the app
+    is (re)opened on the same address. The registry itself is still written
+    only on change (no param churn)."""
     add_local_app(LocalApp(app_id="app-1", endpoint="ws://10.0.0.5:8443"), self.params)
     calls: list[str] = []
     listener, sender, addr = self._make_pair()
@@ -233,9 +236,13 @@ class TestLocalDiscovery(OpenpilotTestCase):
           break
         time.sleep(0.02)
       time.sleep(0.1)
-      sender.sendto(beacon("app-1"), addr)  # same address — not a change
+      sender.sendto(beacon("app-1"), addr)  # same address — still a fresh beacon
       time.sleep(0.2)
-      assert calls == ["ws://127.0.0.1:8443"]
+      # Both beacons fired the callback (fresh app alive → re-evaluate), even
+      # though the second one changed nothing in the registry.
+      assert calls == ["ws://127.0.0.1:8443", "ws://127.0.0.1:8443"]
+      apps = get_local_apps(self.params)
+      assert apps[0].endpoint == "ws://127.0.0.1:8443"
     finally:
       discovery.stop()
       discovery.join(timeout=2)

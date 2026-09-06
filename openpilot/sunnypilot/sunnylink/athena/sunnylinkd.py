@@ -476,33 +476,47 @@ def _probe_local_apps(active_ws: WebSocket, discovery: LocalDiscovery,
     break
 
 
-def _handle_paired_refresh(backoffs: dict[str, float], beacon: AppBeacon) -> None:
+def _handle_paired_refresh(backoffs: dict[str, float], force_attempts: dict[str, float],
+                           beacon: AppBeacon) -> None:
   """
-  A paired app just announced a NEW endpoint (its IP changed — the discovery
-  listener has already refreshed the registry). Clear that app's stale
-  endpoint backoffs, and when the device is not already serving a local app
-  (i.e. it is on the cloud link or idle), drop the active connection so the
-  loop re-selects and dials the fresh address within the next beacon tick
-  (~5s) instead of waiting out the 60s probe cadence.
+  A paired app just announced itself (fresh beacon — the discovery listener
+  has already refreshed the registry if the address changed). Its beacon
+  proves its server is up RIGHT NOW, so any dial backoff on it is stale truth:
+  clear it, and when the device is not already serving a local app (i.e. it
+  is on the cloud link or idle), drop the active connection so the loop
+  re-selects and dials the app within the next beacon tick (~5s) instead of
+  waiting out the 60s probe cadence or a 300s endpoint backoff. This is what
+  reconnects a device locally within seconds of the app being (re)opened even
+  when the app's IP never changed (previously: one refused dial during the
+  app's startup left the device on the cloud link for up to 5 minutes).
 
   Deliberately conservative about churn:
   - A pairing session in progress is never interrupted (the code is being
     typed over that connection).
-  - If already connected to the fresh endpoint, nothing to do.
+  - If already connected to the beacon endpoint, nothing to do.
   - If connected to ANOTHER local app, no forced switch — the natural
     reconnect cycle re-picks, and selection prefers the fresh beacon anyway.
+  - A forced re-selection for the same endpoint is attempted at most once per
+    LOCAL_BEACON_FRESH_S: when the dial fails (the app's server really is
+    down), the beacon keeps arriving every 5s — without the guard that would
+    thrash the cloud link every tick.
   """
   if not any(app.app_id == beacon.app_id for app in get_local_apps()):
     return
   for app in get_local_apps():
-    if app.app_id == beacon.app_id and app.endpoint != beacon.endpoint:
+    if app.app_id == beacon.app_id:
       backoffs.pop(app.endpoint, None)
+  backoffs.pop(beacon.endpoint, None)
   if _pairing_in_progress.is_set():
     return
   if _active_local_endpoint == beacon.endpoint:
     return
   if _active_local_endpoint is not None:
     return
+  now = time.monotonic()
+  if force_attempts.get(beacon.endpoint, 0.0) + LOCAL_BEACON_FRESH_S > now:
+    return
+  force_attempts[beacon.endpoint] = now
   ws = _active_ws
   if ws is not None:
     cloudlog.event("sunnylinkd.paired_refresh.reconnect",
@@ -588,9 +602,14 @@ def _connection_loop(exit_event: threading.Event | None, discovery: LocalDiscove
   conn_start = None
   conn_retries = 0
   backoffs: dict[str, float] = {}
-  # A paired app's beacon can announce a NEW endpoint at any time (its IP
-  # changed) — force a prompt re-selection to the fresh address.
-  discovery.paired_refresh_cb = partial(_handle_paired_refresh, backoffs)
+  # Paired-app beacon nudges: last forced re-selection per endpoint (see
+  # _handle_paired_refresh) — keeps fresh-beacon reconnects from thrashing
+  # the connection loop when a dial genuinely fails.
+  force_attempts: dict[str, float] = {}
+  # A paired app's beacon announces itself at any time (fresh beacon — the app
+  # (re)opened, possibly on a NEW endpoint after an IP change) — clear stale
+  # backoffs and force a prompt re-selection to the app.
+  discovery.paired_refresh_cb = partial(_handle_paired_refresh, backoffs, force_attempts)
 
   while (exit_event is None or not exit_event.is_set()) and _serviceable(params):
     ws_uri, kind = _pick_ws_uri(discovery, backoffs)
