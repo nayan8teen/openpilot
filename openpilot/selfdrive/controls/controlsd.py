@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import math
+import numpy as np
 from numbers import Number
 
 from openpilot.cereal import log
@@ -28,6 +29,22 @@ State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
 
+LANE_CHANGE_START_CURV_RATE_T = (1.0, 3.0)                    # seconds since laneChangeStarting began
+LANE_CHANGE_START_CURV_RATE_BP = (50. * CV.KPH_TO_MS, 100. * CV.KPH_TO_MS)  # m/s
+LANE_CHANGE_START_CURV_RATE_V1 = (0.004, 0.001)              # 1/m per second at t <= 1 s, low / high speed
+LANE_CHANGE_START_CURV_RATE_V3 = (0.004, 0.003)              # 1/m per second at t >= 3 s, low / high speed
+
+
+def _lane_change_start_curv_rate(t: float, v_ego: float) -> float:
+  t1, t3 = LANE_CHANGE_START_CURV_RATE_T
+  r1 = float(np.interp(v_ego, LANE_CHANGE_START_CURV_RATE_BP, LANE_CHANGE_START_CURV_RATE_V1))
+  r3 = float(np.interp(v_ego, LANE_CHANGE_START_CURV_RATE_BP, LANE_CHANGE_START_CURV_RATE_V3))
+  if t <= t1:
+    return r1
+  if t >= t3:
+    return r3
+  return r1 + (r3 - r1) * (t - t1) / (t3 - t1)
+
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 
 
@@ -52,6 +69,7 @@ class Controls(ControlsExt):
     self.steer_limited_by_safety = False
     self.curvature = 0.0
     self.desired_curvature = 0.0
+    self.lane_change_start_t = 0.0
 
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
@@ -143,6 +161,13 @@ class Controls(ControlsExt):
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:
       new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
+    if model_v2.meta.laneChangeState == LaneChangeState.laneChangeStarting:
+      self.lane_change_start_t += DT_CTRL
+      max_lc_delta = _lane_change_start_curv_rate(self.lane_change_start_t, CS.vEgo) * DT_CTRL
+      new_desired_curvature = min(max(new_desired_curvature, self.desired_curvature - max_lc_delta),
+                                  self.desired_curvature + max_lc_delta)
+    else:
+      self.lane_change_start_t = 0.0
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
     lat_delay = self.sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
 
