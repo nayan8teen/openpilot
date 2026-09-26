@@ -1,6 +1,9 @@
+from typing import cast
+
 import numpy as np
 
 from openpilot.cereal import log
+from openpilot.common.params import Params
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.modeld.lane_policy import (
@@ -73,10 +76,10 @@ class TestLanePolicy(OpenpilotTestCase):
         assert key == "LanePolicyEnabled"
         return self.value
 
-    assert get_lane_policy_enabled(FakeParams(None))
-    assert get_lane_policy_enabled(FakeParams(b"1"))
-    assert not get_lane_policy_enabled(FakeParams(b"0"))
-    assert not get_lane_policy_enabled(FakeParams(False))
+    assert get_lane_policy_enabled(cast(Params, FakeParams(None)))
+    assert get_lane_policy_enabled(cast(Params, FakeParams(b"1")))
+    assert not get_lane_policy_enabled(cast(Params, FakeParams(b"0")))
+    assert not get_lane_policy_enabled(cast(Params, FakeParams(False)))
 
   def test_raw_probability_indices(self):
     output = make_model_output(0.97, 0.96)
