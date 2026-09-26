@@ -241,7 +241,8 @@ sections:
     description: Steer toward the detected lane center when both lane lines are clearly
       visible. The driving model still controls the overall path; this only adds
       a bounded assist to keep the car centered in its lane. Disengages for lane
-      changes, turn signals, and at low speed.
+      changes, turn signals, and at low speed. Disabled by default - enable to
+      activate.
 - id: lane_change
   title: Lane Change
   description: Automatic lane change timing and behavior

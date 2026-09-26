@@ -57,6 +57,59 @@ sections:
         type: capability
         field: has_longitudinal_control
         equals: true
+  sub_panels:
+  - id: dec_settings
+    label: Dynamic Experimental Settings
+    trigger_key: DynamicExperimentalControl
+    trigger_condition:
+      type: param
+      key: DynamicExperimentalControl
+      equals: true
+    items:
+    - key: DynamicExperimentalStandstill
+      widget: toggle
+      title: Standstill triggers Blended
+    - key: DynamicExperimentalModelSlowDown
+      widget: toggle
+      title: Model Slow Down triggers Blended
+    - key: DynamicExperimentalFCW
+      widget: toggle
+      title: Forward Collision Warning triggers Blended
+    - key: DynamicExperimentalHasLead
+      widget: toggle
+      title: Enable Lead Based Decisions
+    - key: DynamicExperimentalDistanceBased
+      widget: toggle
+      title: Distance Based Blended
+    - key: DynamicExperimentalDistanceValue
+      widget: option
+      title: Blended Distance Threshold
+      min: 0.0
+      max: 25.0
+      step: 1.0
+      unit: m
+    - key: DynamicExperimentalSpeedBased
+      widget: toggle
+      title: Speed Based Blended
+    - key: DynamicExperimentalSpeedValue
+      widget: option
+      title: Blended Speed Threshold
+      min: 0.0
+      max: 25.0
+      step: 1.0
+      unit: km/h
+    - key: DynamicExperimentalSlowness
+      widget: toggle
+      title: Slow Traffic triggers ACC
+    - key: DynamicExperimentalFollowLead
+      widget: toggle
+      title: Prefer ACC with Lead
+    - key: DynamicExperimentalSlowerLead
+      widget: toggle
+      title: Significantly Slower Lead triggers Blended
+    - key: DynamicExperimentalStoppedLead
+      widget: toggle
+      title: Stopped Lead triggers Blended
 - id: custom_acc_increments
   title: Custom ACC Speed Intervals
   description: ''

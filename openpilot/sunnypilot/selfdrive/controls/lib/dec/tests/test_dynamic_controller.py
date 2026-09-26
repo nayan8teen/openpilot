@@ -4,6 +4,9 @@ from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimen
 class MockLeadOne:
   def __init__(self, present=0.0):
     self.present = present
+    self.dRel = 100.0
+    self.vLead = 0.0
+    self.vRel = 0.0
 
 class MockRadarState:
   def __init__(self, present=0.0):
@@ -28,6 +31,10 @@ class MockSelfDriveState:
 class MockParams:
   def get_bool(self, name):
     return True
+
+  def get(self, name):
+    # Match Params behavior for the INT distance/speed defaults.
+    return 0 if name.endswith("Value") else None
 
 def default_sm():
   sm = {
@@ -65,7 +72,8 @@ class TestDynamicExperimentalController(OpenpilotTestCase):
   def test_standstill_triggers_blended(self, mock_cp, mock_mpc, default_sm):
     controller = DynamicExperimentalController(mock_cp, mock_mpc, params=MockParams())
     default_sm['carState'].standstill = True
-    for _ in range(10):
+    # ModeManager needs min_mode_duration + confidence hysteresis to switch.
+    for _ in range(20):
       controller.update(default_sm)
     assert controller.mode() == "blended"
 
@@ -85,7 +93,7 @@ class TestDynamicExperimentalController(OpenpilotTestCase):
     controller._v_ego_kph = 35.0
     default_sm['modelV2'] = MockModelData(valid=False)  # Incomplete trajectory
 
-    for _ in range(3):
+    for _ in range(30):
       controller.update(default_sm)
 
     assert controller.mode() == "blended"

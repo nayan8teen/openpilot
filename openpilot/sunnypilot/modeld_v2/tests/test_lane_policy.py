@@ -76,7 +76,9 @@ class TestLanePolicy(OpenpilotTestCase):
         assert key == "LanePolicyEnabled"
         return self.value
 
-    assert get_lane_policy_enabled(cast(Params, FakeParams(None)))
+    # Unset defaults to disabled: the policy is opt-in so process replay and
+    # the model-release pipeline keep producing raw E2E curvature.
+    assert not get_lane_policy_enabled(cast(Params, FakeParams(None)))
     assert get_lane_policy_enabled(cast(Params, FakeParams(b"1")))
     assert not get_lane_policy_enabled(cast(Params, FakeParams(b"0")))
     assert not get_lane_policy_enabled(cast(Params, FakeParams(False)))

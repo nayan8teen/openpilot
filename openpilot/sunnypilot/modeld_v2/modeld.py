@@ -404,13 +404,11 @@ def main(demo=False):
     frame_id = sm["narrowRoadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)
     blinkers_active = sm["carState"].leftBlinker or sm["carState"].rightBlinker
-    # Read the toggle every model frame so sunnylink writes take effect
-    # immediately, not on the next one-second param poll.
-    lane_policy_enabled = get_lane_policy_enabled(params)
     if sm.frame % 60 == 0:
       model.lat_delay = get_lat_delay(params, sm["lateralDelay"].lateralDelay)
       model.PLANPLUS_CONTROL = params.get("PlanplusControl", return_default=True)
       camera_offset_helper.set_offset(params.get("CameraOffset", return_default=True))
+      lane_policy_enabled = get_lane_policy_enabled(params)
     lat_delay = model.lat_delay + model.LAT_SMOOTH_SECONDS
     if sm.updated["extrinsicsCalibration"] and sm.seen['narrowRoadCameraState'] and sm.seen['deviceState']:
       device_from_calib_euler = np.array(sm["extrinsicsCalibration"].rpyCalib, dtype=np.float32)

@@ -22,6 +22,10 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
 LANE_POLICY_ENABLED_PARAM = "LanePolicyEnabled"
+# The policy is opt-in: replay refs and the model-release pipeline were
+# generated with raw E2E curvature, so lane centering must not be active
+# until the user (or sunnylink) explicitly enables it.
+LANE_POLICY_DEFAULT = False
 
 # Two-line confidence uses entry/exit hysteresis. It prevents a clean lane from
 # dropping to E2E merely because one model frame is slightly less certain.
@@ -54,18 +58,19 @@ LANE_LOCK_MAX_LANE_CHANGE_PROB = 0.10
 # stationary must not tug the wheel on launch. Arming progress and the learned
 # width are kept so centering resumes smoothly above the threshold.
 LANE_LOCK_MIN_SPEED = 3.0                      # m/s
+LANE_LOCK_REF_SPEED = 20.0                     # m/s, correction ramp reference speed
 LANE_LOCK_LOG_INTERVAL = 1.0                   # seconds
 
 
 def get_lane_policy_enabled(params: Params) -> bool:
   """Read the lane-centering toggle, correctly decoding Params' b\"0\"/b\"1\" value.
 
-  Defaults to enabled when unset so the policy matches the param default and
-  older params databases that predate the key.
+  Defaults to disabled when unset: replay refs and the model-release pipeline
+  were generated with raw E2E curvature, so the policy must be opt-in.
   """
   value = params.get(LANE_POLICY_ENABLED_PARAM)
   if value is None:
-    return True
+    return LANE_POLICY_DEFAULT
   if isinstance(value, (bytes, bytearray)):
     return value == b"1"
   return bool(value)
