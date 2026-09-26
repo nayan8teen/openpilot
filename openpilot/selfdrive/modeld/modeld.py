@@ -37,6 +37,7 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import MODELS_DIR, chestnut_present, chestnut_compiled, modeld_pkl_path, load_oob
+from openpilot.selfdrive.modeld.lane_policy import LanePolicy, get_lane_policy_enabled
 from openpilot.sunnypilot.livedelay.helpers import get_lat_delay
 from openpilot.sunnypilot.modeld_v2.modeld_base import ModelStateBase
 from openpilot.sunnypilot.selfdrive.controls.lib.relc import RoadEdgeLaneChangeController
@@ -50,7 +51,10 @@ BIG_MODEL_TIMEOUT = 60
 
 
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
-                          lat_action_t: float, long_action_t: float, v_ego: float) -> log.ModelDataV2.Action:
+                          lat_action_t: float, long_action_t: float, v_ego: float,
+                          lane_policy: LanePolicy | None = None,
+                          blinkers_active: bool = False,
+                          lane_policy_enabled: bool = False) -> log.ModelDataV2.Action:
   if 'action' not in model_output:
     plan = model_output['plan'][0]
     desired_accel = get_accel_from_plan(plan[:,Plan.VELOCITY][:,0],
@@ -65,6 +69,9 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
   else:
     desired_accel = model_output['action'][0,1]
     desired_curvature = model_output['action'][0,0] / (max(1.0, v_ego))**2
+  if lane_policy is not None:
+    desired_curvature = lane_policy.update(model_output, desired_curvature, v_ego,
+                                           blinkers_active, lane_policy_enabled)
   stop = should_stop(v_ego, desired_accel)
   desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
   if v_ego > MIN_LAT_CONTROL_SPEED:
@@ -321,6 +328,12 @@ def main(demo=False):
 
   DH = DesireHelper()
   RELC = RoadEdgeLaneChangeController()
+  lane_policy = LanePolicy()
+  lane_policy_enabled = get_lane_policy_enabled(params)
+  last_published_lane_policy_active: bool | None = None
+  last_published_lane_policy_blending: bool | None = None
+  params.put_bool("LanePolicyActive", False)
+  params.put_bool("LanePolicyBlending", False)
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
@@ -360,6 +373,10 @@ def main(demo=False):
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["narrowRoadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)
+    blinkers_active = sm["carState"].leftBlinker or sm["carState"].rightBlinker
+    # Read the toggle every model frame so sunnylink writes take effect
+    # immediately, not on the next one-second param poll.
+    lane_policy_enabled = get_lane_policy_enabled(params)
     model.lat_delay = get_lat_delay(params, sm["lateralDelay"].lateralDelay)
     lat_delay = sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
     if sm.updated["extrinsicsCalibration"] and sm.seen['narrowRoadCameraState'] and sm.seen['deviceState']:
@@ -427,7 +444,16 @@ def main(demo=False):
       posenet_send = messaging.new_message('cameraOdometry')
       mdv2sp_send = messaging.new_message('modelDataV2SP')
 
-      action = get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego)
+      action = get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego,
+                                     lane_policy, blinkers_active, lane_policy_enabled)
+      lane_policy_active = lane_policy_enabled and lane_policy.is_active
+      lane_policy_blending = lane_policy_enabled and lane_policy.is_blending
+      if (lane_policy_active != last_published_lane_policy_active or
+          lane_policy_blending != last_published_lane_policy_blending):
+        params.put_bool("LanePolicyActive", lane_policy_active)
+        params.put_bool("LanePolicyBlending", lane_policy_blending)
+        last_published_lane_policy_active = lane_policy_active
+        last_published_lane_policy_blending = lane_policy_blending
       prev_action = action
       fill_model_msg(modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,
