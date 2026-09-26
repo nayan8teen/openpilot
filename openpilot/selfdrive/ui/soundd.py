@@ -87,6 +87,7 @@ class Soundd(QuietMode):
     self.pending_stop = False
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
+    self.spl_received = False
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
@@ -175,6 +176,22 @@ class Soundd(QuietMode):
     sd._initialize()
     return sd.OutputStream(channels=1, samplerate=SAMPLE_RATE, callback=self.callback, blocksize=SAMPLE_BUFFER)
 
+  def update_volume(self, valid: bool, sound_pressure_weighted_db: float) -> None:
+    # Only adapt volume from valid mic data. With invalid (stale) soundPressure
+    # we freeze instead of decaying towards MIN_VOLUME, so critical alerts can
+    # never be silenced by a broken mic (https://github.com/commaai/openpilot/issues/36088)
+    if not valid:
+      if self.spl_received:
+        cloudlog.warning("soundd: soundPressure invalid, freezing alert volume")
+        self.spl_received = False
+      return
+
+    self.spl_received = True
+    self.spl_filter_weighted.update(sound_pressure_weighted_db)
+    # freeze volume during alerts to avoid mic feedback increasing volume
+    if self.current_alert == AudibleAlert.none:
+      self.current_volume = self.calculate_volume(float(self.spl_filter_weighted.x))
+
   def soundd_thread(self):
     # sounddevice must be imported after forking processes
     import sounddevice as sd
@@ -191,11 +208,8 @@ class Soundd(QuietMode):
 
         self.load_param()
 
-        # freeze volume during alerts to avoid mic feedback increasing volume
         if sm.updated['soundPressure']:
-          self.spl_filter_weighted.update(sm["soundPressure"].soundPressureWeightedDb)
-          if self.current_alert == AudibleAlert.none:
-            self.current_volume = self.calculate_volume(float(self.spl_filter_weighted.x))
+          self.update_volume(bool(sm.valid['soundPressure']), float(sm["soundPressure"].soundPressureWeightedDb))
 
         self.get_audible_alert(sm)
 
