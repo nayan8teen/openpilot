@@ -120,6 +120,25 @@ class ManagerProcess(ABC):
     cloudlog.info(f"sending signal {sig} to {self.name}")
     os.kill(self.proc.pid, sig)
 
+  def _reap_if_dead(self) -> bool:
+    """Returns False if the process handle is alive and nothing should be started.
+    For supervised processes, a dead process is reaped so it gets restarted on
+    the next manager loop instead of staying dead while shouldBeRunning=True
+    (e.g. micd/soundd failing at startup would otherwise block engagement until
+    the device is power cycled)."""
+    if self.proc is None:
+      return True
+
+    if self.proc.exitcode is None:
+      return False
+
+    if not self.supervised:
+      return False
+
+    cloudlog.warning(f"restarting dead process {self.name} (exit code: {self.proc.exitcode})")
+    self.proc = None
+    return True
+
   def get_process_state_msg(self):
     state = log.ManagerState.ProcessState.new_message()
     state.name = self.name
@@ -179,25 +198,6 @@ class PythonProcess(ManagerProcess):
     self.proc = Process(name=self.name, target=self.launcher, args=(self.module, self.name))
     self.proc.start()
     self.shutting_down = False
-
-  def _reap_if_dead(self) -> bool:
-    """Returns False if the process handle is alive and nothing should be started.
-    For supervised processes, a dead process is reaped so it gets restarted on
-    the next manager loop instead of staying dead while shouldBeRunning=True
-    (e.g. micd/soundd failing at startup would otherwise block engagement until
-    the device is power cycled)."""
-    if self.proc is None:
-      return True
-
-    if self.proc.exitcode is None:
-      return False
-
-    if not self.supervised:
-      return False
-
-    cloudlog.warning(f"restarting dead process {self.name} (exit code: {self.proc.exitcode})")
-    self.proc = None
-    return True
 
 
 class DaemonProcess(ManagerProcess):

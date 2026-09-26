@@ -3,7 +3,7 @@ from multiprocessing import Process
 from typing import cast
 
 from openpilot.common.test import OpenpilotTestCase
-from openpilot.system.manager.process import PythonProcess
+from openpilot.system.manager.process import NativeProcess, PythonProcess
 
 
 def always_run(started, params, CP):
@@ -52,6 +52,19 @@ class TestProcessSupervision(OpenpilotTestCase):
     assert managed_processes['micd'].supervised
     assert managed_processes['soundd'].supervised
     assert not managed_processes['controlsd'].supervised
+
+  def test_native_process_has_reaper(self):
+    # regression: NativeProcess.start() calls the reaper, so it must exist on
+    # the base class for every process type
+    p = NativeProcess("test_native", "openpilot/system/loggerd", ["./loggerd"], always_run)
+    p.proc = cast(Process, FakeProc(1))
+    assert not p._reap_if_dead()
+    assert p.proc is not None
+
+    p = NativeProcess("test_native", "openpilot/system/loggerd", ["./loggerd"], always_run, supervised=True)
+    p.proc = cast(Process, FakeProc(1))
+    assert p._reap_if_dead()
+    assert p.proc is None
 
 
 if __name__ == "__main__":
