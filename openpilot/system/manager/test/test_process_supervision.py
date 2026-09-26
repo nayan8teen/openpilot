@@ -1,4 +1,6 @@
 import unittest
+from multiprocessing import Process
+from typing import cast
 
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.system.manager.process import PythonProcess
@@ -20,7 +22,9 @@ class TestProcessSupervision(OpenpilotTestCase):
 
   def _make_process(self, supervised, exitcode=None):
     p = PythonProcess("test_proc", "openpilot.system.micd", always_run, supervised=supervised)
-    p.proc = FakeProc(exitcode)
+    # ty can't know FakeProc structurally satisfies the Process handle surface
+    # we rely on (just .exitcode); cast like other tests in this repo
+    p.proc = cast(Process, FakeProc(exitcode))
     return p
 
   def test_unsupervised_dead_process_is_not_reaped(self):
