@@ -8,6 +8,7 @@ import math
 import numpy as np
 import pyray as rl
 from collections import OrderedDict
+from collections.abc import Callable
 from functools import wraps
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
@@ -55,10 +56,14 @@ def quantized_lru_cache_sp(maxsize=256):
   return decorator
 
 
+# Angle inputs accept a numeric angle, a named mask, or a per-radius callable.
+AngleValue = float | str | Callable[[np.ndarray], np.ndarray]
+
+
 @quantized_lru_cache_sp(maxsize=256)
 def arc_bar_pts_sp(cx: float, cy: float,
                    r_mid: float, thickness: float,
-                   a0: any, a1: any,
+                   a0: AngleValue, a1: AngleValue,
                    *, max_points: int = 60, cap_segs: int = 6,
                    cap_radius_a0: float = 7, cap_radius_a1: float = 7,
                    px_per_seg: float = 4.0,
@@ -78,7 +83,7 @@ def arc_bar_pts_sp(cx: float, cy: float,
       return np.array([val(r) for r in r_arr], dtype=np.float32)
     return np.full_like(r_arr, val, dtype=np.float32)
 
-  def get_cap(is_start: bool, cap_radius: float, angle_val: any):
+  def get_cap(is_start: bool, cap_radius: float, angle_val: AngleValue):
     if callable(angle_val) or isinstance(angle_val, str):
       # Generate points along the radius to form the circular mask
       rs = np.linspace(r_outer, r_inner, cap_segs + 1, dtype=np.float32) if not is_start else np.linspace(r_inner, r_outer, cap_segs + 1, dtype=np.float32)

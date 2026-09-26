@@ -144,7 +144,12 @@ jobs:
       run: scons
     - name: Run replay
       timeout-minutes: ${{ contains(runner.name, 'nsc') && 2 || 20 }}
-      continue-on-error: ${{ github.ref == 'refs/heads/master' }}
+      # Process replay refs are only regenerated on the upstream master
+      # branches, so forks that are ahead of the published ref commit fail
+      # against stale refs regardless of the PR's own changes. Keep running
+      # the replay and publishing the diff report for review, but only fail
+      # the job where refs are actually maintained.
+      continue-on-error: ${{ github.ref == 'refs/heads/master' || github.repository != 'commaai/openpilot' && github.repository != 'sunnypilot/sunnypilot' }}
       run: openpilot/selfdrive/test/process_replay/test_processes.py -j$(nproc)
     - name: Print diff
       id: print-diff

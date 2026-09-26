@@ -231,6 +231,18 @@ sections:
         label: v0.0
       enablement:
       - $ref: '#/macros/offroad'
+- id: lane_centering
+  title: Lane Centering
+  description: Model-driven lane centering assist
+  items:
+  - key: LanePolicyEnabled
+    widget: toggle
+    title: Lane Centering Assist
+    description: Steer toward the detected lane center when both lane lines are clearly
+      visible. The driving model still controls the overall path; this only adds
+      a bounded assist to keep the car centered in its lane. Disengages for lane
+      changes, turn signals, and at low speed. Disabled by default - enable to
+      activate.
 - id: lane_change
   title: Lane Change
   description: Automatic lane change timing and behavior

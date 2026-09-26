@@ -504,6 +504,19 @@
           ]
         },
         {
+          "id": "lane_centering",
+          "title": "Lane Centering",
+          "description": "Model-driven lane centering assist",
+          "items": [
+            {
+              "key": "LanePolicyEnabled",
+              "widget": "toggle",
+              "title": "Lane Centering Assist",
+              "description": "Steer toward the detected lane center when both lane lines are clearly visible. The driving model still controls the overall path; this only adds a bounded assist to keep the car centered in its lane. Disengages for lane changes, turn signals, and at low speed. Disabled by default - enable to activate."
+            }
+          ]
+        },
+        {
           "id": "lane_change",
           "title": "Lane Change",
           "description": "Automatic lane change timing and behavior",
@@ -692,68 +705,70 @@
                 {
                   "key": "DynamicExperimentalStandstill",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalStandstill"
+                  "title": "Standstill triggers Blended"
                 },
                 {
                   "key": "DynamicExperimentalModelSlowDown",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalModelSlowDown"
+                  "title": "Model Slow Down triggers Blended"
                 },
                 {
                   "key": "DynamicExperimentalFCW",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalFCW"
+                  "title": "Forward Collision Warning triggers Blended"
                 },
                 {
                   "key": "DynamicExperimentalHasLead",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalHasLead"
+                  "title": "Enable Lead Based Decisions"
                 },
                 {
                   "key": "DynamicExperimentalDistanceBased",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalDistanceBased"
+                  "title": "Distance Based Blended"
                 },
                 {
                   "key": "DynamicExperimentalDistanceValue",
                   "widget": "option",
-                  "title": "DynamicExperimentalDistanceValue",
+                  "title": "Blended Distance Threshold",
                   "min": 0.0,
                   "max": 25.0,
-                  "step": 1.0
+                  "step": 1.0,
+                  "unit": "m"
                 },
                 {
                   "key": "DynamicExperimentalSpeedBased",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalSpeedBased"
+                  "title": "Speed Based Blended"
                 },
                 {
                   "key": "DynamicExperimentalSpeedValue",
                   "widget": "option",
-                  "title": "DynamicExperimentalSpeedValue",
+                  "title": "Blended Speed Threshold",
                   "min": 0.0,
                   "max": 25.0,
-                  "step": 1.0
+                  "step": 1.0,
+                  "unit": "km/h"
                 },
                 {
                   "key": "DynamicExperimentalSlowness",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalSlowness"
+                  "title": "Slow Traffic triggers ACC"
                 },
                 {
                   "key": "DynamicExperimentalFollowLead",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalFollowLead"
+                  "title": "Prefer ACC with Lead"
                 },
                 {
                   "key": "DynamicExperimentalSlowerLead",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalSlowerLead"
+                  "title": "Significantly Slower Lead triggers Blended"
                 },
                 {
                   "key": "DynamicExperimentalStoppedLead",
                   "widget": "toggle",
-                  "title": "DynamicExperimentalStoppedLead"
+                  "title": "Stopped Lead triggers Blended"
                 }
               ]
             }
@@ -1462,12 +1477,6 @@
               "widget": "toggle",
               "title": "Steering Arc",
               "description": "Display steering arc on the driving screen when lateral control is enabled."
-            },
-            {
-              "key": "AltTorqueBar",
-              "widget": "toggle",
-              "title": "Alternative Torque Bar",
-              "description": "Alternative implementation of steering wheel & torque bar for the Comma 4."
             },
             {
               "key": "ShowTurnSignals",
