@@ -65,6 +65,7 @@ class ManagerProcess(ABC):
   should_run: Callable[[bool, Params, car.CarParams], bool]
   proc: Process | None = None
   enabled = True
+  supervised = False  # restart the process if it dies while it should be running
   name = ""
   shutting_down = False
 
@@ -119,6 +120,25 @@ class ManagerProcess(ABC):
     cloudlog.info(f"sending signal {sig} to {self.name}")
     os.kill(self.proc.pid, sig)
 
+  def _reap_if_dead(self) -> bool:
+    """Returns False if the process handle is alive and nothing should be started.
+    For supervised processes, a dead process is reaped so it gets restarted on
+    the next manager loop instead of staying dead while shouldBeRunning=True
+    (e.g. micd/soundd failing at startup would otherwise block engagement until
+    the device is power cycled)."""
+    if self.proc is None:
+      return True
+
+    if self.proc.exitcode is None:
+      return False
+
+    if not self.supervised:
+      return False
+
+    cloudlog.warning(f"restarting dead process {self.name} (exit code: {self.proc.exitcode})")
+    self.proc = None
+    return True
+
   def get_process_state_msg(self):
     state = log.ManagerState.ProcessState.new_message()
     state.name = self.name
@@ -131,13 +151,14 @@ class ManagerProcess(ABC):
 
 
 class NativeProcess(ManagerProcess):
-  def __init__(self, name, cwd, cmdline, should_run, enabled=True, sigkill=False):
+  def __init__(self, name, cwd, cmdline, should_run, enabled=True, sigkill=False, supervised=False):
     self.name = name
     self.cwd = cwd
     self.cmdline = cmdline
     self.should_run = should_run
     self.enabled = enabled
     self.sigkill = sigkill
+    self.supervised = supervised
     self.launcher = nativelauncher
 
   def start(self) -> None:
@@ -145,7 +166,7 @@ class NativeProcess(ManagerProcess):
     if self.shutting_down:
       self.stop()
 
-    if self.proc is not None:
+    if not self._reap_if_dead():
       return
 
     cwd = os.path.join(BASEDIR, self.cwd)
@@ -156,12 +177,13 @@ class NativeProcess(ManagerProcess):
 
 
 class PythonProcess(ManagerProcess):
-  def __init__(self, name, module, should_run, enabled=True, sigkill=False):
+  def __init__(self, name, module, should_run, enabled=True, sigkill=False, supervised=False):
     self.name = name
     self.module = module
     self.should_run = should_run
     self.enabled = enabled
     self.sigkill = sigkill
+    self.supervised = supervised
     self.launcher = launcher
 
   def start(self) -> None:
@@ -169,7 +191,7 @@ class PythonProcess(ManagerProcess):
     if self.shutting_down:
       self.stop()
 
-    if self.proc is not None:
+    if not self._reap_if_dead():
       return
 
     cloudlog.info(f"starting python {self.module}")
