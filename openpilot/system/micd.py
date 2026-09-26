@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import contextlib
 import numpy as np
 from functools import cache
 import threading
@@ -61,6 +62,8 @@ class Mic:
     self.sound_pressure_weighted = 0
     self.sound_pressure_level_weighted = 0
 
+    self.stream = None
+
     self.lock = threading.Lock()
 
   def update(self):
@@ -69,13 +72,41 @@ class Mic:
       sound_pressure_weighted = self.sound_pressure_weighted
       sound_pressure_level_weighted = self.sound_pressure_level_weighted
 
-    msg = messaging.new_message('soundPressure', valid=True)
+    # mark messages invalid while the mic stream is down so consumers know the
+    # data is stale instead of silently flatlining at zero
+    stream_ok = self.stream is not None and self.stream.active
+    msg = messaging.new_message('soundPressure', valid=stream_ok)
     msg.soundPressure.soundPressure = float(sound_pressure)
     msg.soundPressure.soundPressureWeighted = float(sound_pressure_weighted)
     msg.soundPressure.soundPressureWeightedDb = float(sound_pressure_level_weighted)
 
     self.pm.send('soundPressure', msg)
     self.rk.keep_time()
+
+    # the stream can go inactive while the process is alive, e.g. if the mic
+    # device is gone; retry opening it so we self-recover instead of
+    # permanently broadcasting invalid (stale) data
+    if not stream_ok:
+      try:
+        self._reinit_stream()
+      except Exception:
+        cloudlog.exception("micd failed to reopen stream")
+
+  def _reinit_stream(self):
+    import sounddevice as sd
+
+    if self.stream is not None:
+      with contextlib.suppress(Exception):
+        self.stream.close()
+      self.stream = None
+
+    # reload sounddevice to reinitialize portaudio, then open the input stream
+    sd._terminate()
+    sd._initialize()
+    stream = sd.InputStream(channels=1, samplerate=SAMPLE_RATE, callback=self.callback, blocksize=SAMPLE_BUFFER)
+    self.stream = stream
+    stream.start()
+    cloudlog.info(f"micd stream reinitialized: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
 
   def callback(self, indata, frames, time, status):
     """
@@ -84,7 +115,7 @@ class Mic:
 
     Logged A-weighted equivalents are rough approximations of the human-perceived loudness.
     """
-    msg = messaging.new_message('rawAudioData', valid=True)
+    msg = messaging.new_message('rawAudioData', valid=not status)
     audio_data_int_16 = (indata[:, 0] * 32767).astype(np.int16)
     msg.rawAudioData.data = audio_data_int_16.tobytes()
     msg.rawAudioData.sampleRate = SAMPLE_RATE
@@ -115,6 +146,7 @@ class Mic:
     patch_sounddevice(sd)
 
     with self.get_stream(sd) as stream:
+      self.stream = stream
       cloudlog.info(f"micd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
       while True:
         self.update()
