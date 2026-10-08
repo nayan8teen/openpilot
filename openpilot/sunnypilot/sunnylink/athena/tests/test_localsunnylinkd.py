@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import threading
 import time
+from collections.abc import Iterable
 from types import SimpleNamespace
 from typing import cast
 from unittest import mock
@@ -110,8 +111,8 @@ class _CallingSession(_FakeSession):
 
 
 class _FakeDiscovery:
-  def __init__(self, endpoints=()):
-    self._endpoints = list(endpoints)
+  def __init__(self, endpoints: Iterable[str] = ()):
+    self._endpoints: list[str] = list(endpoints)
     self.latest = None
     self.seen: float | None = None
 
@@ -177,6 +178,61 @@ class TestLocalTargets(OpenpilotTestCase):
 
     daemon.backoffs["wss://10.0.0.7:8443"] = time.monotonic() + 60
     self.assertEqual((None, localsunnylinkd.TARGET_V2), daemon.pick_target())
+
+  def test_a_failed_v2_dial_backs_off_for_beacon_intervals_only(self):
+    """A phone that keeps announcing while it refuses to serve ramps up, and no further."""
+    daemon = _Daemon(endpoints=["ws://10.0.0.7:8443"], v2=True)
+    endpoint = "wss://10.0.0.7:8443"
+    with mock.patch.object(daemon, "dial_v2", side_effect=AuthorizationError("refused")):
+      daemon.serve_v2(endpoint, None)
+      first = daemon.backoffs[endpoint] - time.monotonic()
+      for _ in range(8):
+        daemon.serve_v2(endpoint, None)
+      last = daemon.backoffs[endpoint] - time.monotonic()
+
+    # The app is a foreground-only server: one missed dial is worth a beacon interval, not the
+    # five minutes a legacy endpoint gets.
+    self.assertLess(first, localsunnylinkd.ENDPOINT_BACKOFF_S)
+    self.assertGreater(first, 0)
+    self.assertLessEqual(last, localsunnylinkd.V2_ENDPOINT_BACKOFF_MAX_S)
+    self.assertEqual(9, daemon.v2_failures[endpoint])
+
+  def test_a_served_session_clears_the_backoff_ramp(self):
+    daemon = _Daemon(endpoints=["ws://10.0.0.7:8443"], v2=True)
+    endpoint = "wss://10.0.0.7:8443"
+    daemon.backoffs[endpoint] = time.monotonic() + 60
+    daemon.v2_failures[endpoint] = 3
+
+    with mock.patch.object(daemon, "dial_v2", lambda endpoint, exit_event: None), \
+         mock.patch.object(localsunnylinkd, "TICK_INTERVAL_S", 0):
+      daemon.serve_v2(endpoint, None)
+
+    self.assertNotIn(endpoint, daemon.backoffs)
+    self.assertNotIn(endpoint, daemon.v2_failures)
+
+  def test_a_phone_that_stopped_announcing_forgets_its_backoff(self):
+    """Closing the app must not cost cloud-only service after it is reopened.
+
+    The app is a foreground-only server the user opens and closes: a dial that failed while it
+    was closed recorded a backoff against an endpoint that then had no beacons at all. Reopening
+    the app re-announces within seconds, and that record would otherwise hold the device on the
+    cloud for the rest of the backoff.
+    """
+    discovery = _FakeDiscovery(["ws://10.0.0.7:8443"])
+    daemon = _Daemon(discovery=discovery, v2=True)
+    endpoint = "wss://10.0.0.7:8443"
+    daemon.backoffs[endpoint] = time.monotonic() + 300
+    daemon.v2_failures[endpoint] = 1
+
+    # The app was closed: it announces nothing, so the failure outlives its reason.
+    discovery._endpoints = []
+    self.assertEqual((None, localsunnylinkd.TARGET_V2), daemon.pick_target())
+    self.assertNotIn(endpoint, daemon.backoffs)
+    self.assertNotIn(endpoint, daemon.v2_failures)
+
+    # The app is opened again: the device dials it now instead of waiting the record out.
+    discovery._endpoints = ["ws://10.0.0.7:8443"]
+    self.assertEqual((endpoint, localsunnylinkd.TARGET_V2), daemon.pick_target())
 
   def test_a_pending_enrollment_is_dialed_even_before_any_grant(self):
     daemon = _Daemon(endpoints=["ws://10.0.0.7:8443"])

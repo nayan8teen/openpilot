@@ -74,11 +74,10 @@ class TestLocalAuthV2PairingWindow(OpenpilotTestCase):
 
   def test_arming_publishes_the_qr_and_clears_the_request(self):
     qr = self.arm()
-    # The QR is the compact device-signed frame the app scans.
+    # The QR is the compact pointer the app scans: which device, which window, for how long.
     payload = decode_qr(qr)
     authority = local_auth_v2_daemon.get_authority()
     self.assertEqual(payload.cloud_device_id, authority.cloud_device_id)
-    self.assertEqual(encode64(payload.device_key_id), authority.device_key_id)
     self.assertEqual(encode64(payload.session), authority.window.nonce)
     self.assertEqual(payload.ttl_s, 120)
     self.assertEqual(qr, self.published())

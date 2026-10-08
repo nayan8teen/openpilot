@@ -55,6 +55,15 @@ LOCAL_ENABLED_PARAM = "SunnylinkLocalEnabled"
 SESSION_READ_TIMEOUT_S = 5
 TICK_INTERVAL_S = 1.0
 ENDPOINT_BACKOFF_S = 300
+# A v2 endpoint is THE phone, and the app is a foreground-only server the user opens and closes, so
+# a dial that failed because the app was closed must not outlive it: the first failure costs one
+# beacon interval and doubles from there, and only a phone that keeps announcing while it keeps
+# refusing to serve backs off as far as a legacy endpoint does. A phone whose beacons have lapsed
+# clears its own record entirely (see `LocalSunnylinkd.forget_absent_endpoints`) — without that,
+# one dial against a closed app served the phone through the cloud for five minutes after the user
+# reopened it.
+V2_ENDPOINT_BACKOFF_S = 5.0
+V2_ENDPOINT_BACKOFF_MAX_S = float(ENDPOINT_BACKOFF_S)
 
 TARGET_V2 = "v2"
 TARGET_PAIRING = "pairing"
@@ -78,6 +87,8 @@ class LocalSunnylinkd(Sunnylinkd):
     self.active_endpoint: str | None = None
     self.active_ws: WebSocket | None = None
     self.backoffs: dict[str, float] = {}
+    # Consecutive failed v2 dials per endpoint, which is what turns the backoff into a ramp.
+    self.v2_failures: dict[str, int] = {}
     self.stop_event = threading.Event()
 
   # --- local trust --------------------------------------------------------
@@ -174,9 +185,11 @@ class LocalSunnylinkd(Sunnylinkd):
     now = time.monotonic()
 
     if self.v2_auth_active() or local_auth_v2_daemon.pending_enrollment() is not None:
-      for endpoint in self.discovery.fresh_endpoints():
-        pinned = pinned_endpoint(endpoint)
-        if pinned is not None and self.backoffs.get(pinned, 0.0) <= now:
+      pinned_targets = [pinned for pinned in (pinned_endpoint(beacon) for beacon in self.discovery.fresh_endpoints())
+                        if pinned is not None]
+      self.forget_absent_endpoints(set(pinned_targets))
+      for pinned in pinned_targets:
+        if self.backoffs.get(pinned, 0.0) <= now:
           return pinned, TARGET_V2
       return None, TARGET_V2
 
@@ -194,16 +207,32 @@ class LocalSunnylinkd(Sunnylinkd):
         return app.endpoint, TARGET_LEGACY
     return None, TARGET_LEGACY
 
+  def forget_absent_endpoints(self, present: set[str]) -> None:
+    """Drop the backoff of a phone that stopped announcing.
+
+    While the app is closed there is no beacon and nothing to dial, so a failure recorded then says
+    nothing about the phone the user opens next: the beacon freshness window is what tells "the app
+    is gone" apart from "the app cannot be served". Only a phone that keeps announcing keeps
+    backing off.
+    """
+    for endpoint in [key for key in self.backoffs if key.startswith("wss://") and key not in present]:
+      self.backoffs.pop(endpoint, None)
+      self.v2_failures.pop(endpoint, None)
+
   def serve_v2(self, endpoint: str, exit_event: threading.Event | None) -> None:
     try:
       self.dial_v2(endpoint, exit_event)
     except Exception as e:
-      self.backoffs[endpoint] = time.monotonic() + ENDPOINT_BACKOFF_S
+      failures = self.v2_failures.get(endpoint, 0) + 1
+      self.v2_failures[endpoint] = failures
+      self.backoffs[endpoint] = time.monotonic() + min(V2_ENDPOINT_BACKOFF_S * (2 ** (failures - 1)),
+                                                                V2_ENDPOINT_BACKOFF_MAX_S)
       self.params.remove("LastSunnylinkPingTime")
       log_connection_error(e)
       return
 
     self.backoffs.pop(endpoint, None)
+    self.v2_failures.pop(endpoint, None)
     # A finished session is not an error, but never redial in a tight loop.
     time.sleep(TICK_INTERVAL_S)
 

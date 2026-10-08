@@ -26,7 +26,6 @@ from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
-from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 VERSION = 2
 AUTHENTICATE_PURPOSE = "sunnylink-local-authenticate"
@@ -44,27 +43,33 @@ MAX_RECENT_SESSIONS = 3
 MAX_ENROLL_BYTES = 4096
 MAX_GRANTS = 8
 
-# The QR the app scans is a compact signed blob, not a JWT: this metadata is 494 characters of
-# JSON and base64 in a JWT, which is a 77-module code, and a 77-module code cannot be read off a
-# 536x240 panel. The same fields in a binary blob are ~200 characters (53 modules, 4.5 px/module
-# there) with every property kept: signed by the device identity key, fresh per window, and
-# carrying no bearer capability. Frame:
+# The QR the app scans is a POINTER, not a proof: it names one device and one pairing window and
+# carries nothing else. It is unsigned because a signature does not fit the panel a comma device
+# has: the device identity key is RSA (`/persist/comma/id_rsa` — KEYS in common/api/base.py tries
+# id_rsa first, and hw.h hardcodes that path), so PKCS#1 makes the signature 256 bytes and base64
+# makes it 342 characters, i.e. a 461-character code: version 15, 77 modules, 2.73 px/module on the
+# 536x240 mici panel, where it does not decode. The same frame unsigned is 52 characters, a
+# 29-module code at 6.27 px/module there. Nothing is given up for that:
 #
-#   "SLEN" | version | algorithm | len(cloud id) | cloud id | key id (32) | session (32) | ttl
+#   * the DEVICE is the gate, not the code: an enrollment is honored only for a nonce this device
+#     minted in its own live window (`_fresh`), so a code nobody's device made enrolls nothing;
+#   * the app can only enroll a device its own account has settings access to (the authenticated
+#     cloud device details are what resolve the key), so a stranger's code points at a device the
+#     app refuses to touch;
+#   * the device proves the identity key itself to the phone over pinned TLS, against a fresh
+#     challenge, before any session exists (`authenticate_device`) — a stronger proof than a
+#     signature over a static code, and unlike one it costs the code no characters.
 #
-# and the QR is `<base64url frame>.<base64url signature over the frame bytes>`, the signature
-# being raw r||s for ES256 and PKCS#1 v1.5 DER for RS256. The comma device id is deliberately
-# absent: the app already gets it from the same authenticated cloud details it checks the key
-# against, and a second unauthenticated copy of it is one more thing to disagree with.
+# The comma device id is deliberately absent too: the app already gets it from the same
+# authenticated cloud details, and a second unauthenticated copy is one more thing to disagree with.
+#
+# Frame (the whole QR is its base64url):
+#
+#   "SLEN" | version | len(cloud id) | cloud id | session (16) | ttl (1)
 QR_MAGIC = b"SLEN"
-QR_VERSION = 3
-QR_ES256 = 1
-QR_RS256 = 2
-QR_ALGORITHMS = {QR_ES256: "ES256", QR_RS256: "RS256"}
-QR_KEY_ID_BYTES = 32
-QR_SESSION_BYTES = 32
+QR_VERSION = 4
+QR_SESSION_BYTES = 16
 MAX_QR_FRAME_BYTES = 256
-MAX_QR_SIGNATURE_BYTES = 512
 # The only RPCs an authenticated local session may ask for. Long-running operations are
 # deliberately absent.
 LOCAL_METHODS = frozenset({"getParams", "getParamsAllKeys", "getParamsMetadata", "getMessage", "saveParams",
@@ -122,49 +127,41 @@ def key_id(key: ec.EllipticCurvePublicKey | rsa.RSAPublicKey) -> str:
 
 @dataclass(frozen=True)
 class QrPayload:
-  """What the app reads out of the scanned frame. Never authority on its own: the app checks the
-  key id against authenticated cloud device details before it uses any of it."""
+  """What the app reads out of the scanned frame. Never authority on its own: the device key it
+  ends up pinned to comes from authenticated cloud device details, and the nonce only means
+  something to the window this device is displaying now."""
   cloud_device_id: str
-  device_key_id: bytes
   session: bytes
   ttl_s: int
-  algorithm: str
 
 
-def qr_frame(cloud_device_id: str, device_key_id: bytes, session: bytes, ttl_s: int, algorithm: int) -> bytes:
-  if algorithm not in QR_ALGORITHMS:
-    raise AuthorizationError("invalid qr algorithm")
-  if len(device_key_id) != QR_KEY_ID_BYTES or len(session) != QR_SESSION_BYTES:
-    raise AuthorizationError("invalid qr fields")
+def qr_frame(cloud_device_id: str, session: bytes, ttl_s: int) -> bytes:
+  if len(session) != QR_SESSION_BYTES:
+    raise AuthorizationError("invalid qr session")
   if not 0 < ttl_s < 256:
     raise AuthorizationError("invalid qr ttl")
   encoded = text_field(cloud_device_id).encode("utf-8")
   if not 0 < len(encoded) < 256:
     raise AuthorizationError("invalid cloud device id")
-  return QR_MAGIC + bytes([QR_VERSION, algorithm, len(encoded)]) + encoded + device_key_id + session + bytes([ttl_s])
+  return QR_MAGIC + bytes([QR_VERSION, len(encoded)]) + encoded + session + bytes([ttl_s])
 
 
 def decode_qr(raw: str) -> QrPayload:
-  """Parse a scanned QR frame. The signature is the app's to verify (it needs the device key from
-  the cloud); this validates the framing so no caller can disagree with [qr_frame]."""
-  parts = raw.split(".") if isinstance(raw, str) else []
-  if len(parts) != 2:
+  """Parse a scanned QR. The app is the side that reads one (it needs the device key from the
+  cloud); this validates the framing so no caller can disagree with [qr_frame]."""
+  frame = decode64(raw, max_bytes=MAX_QR_FRAME_BYTES)
+  header = len(QR_MAGIC) + 2
+  if len(frame) < header + 1 + QR_SESSION_BYTES + 1 or not frame.startswith(QR_MAGIC):
     raise AuthorizationError("invalid qr")
-  frame = decode64(parts[0], max_bytes=MAX_QR_FRAME_BYTES)
-  decode64(parts[1], max_bytes=MAX_QR_SIGNATURE_BYTES)
-  if len(frame) < len(QR_MAGIC) + 3 + 1 + QR_KEY_ID_BYTES + QR_SESSION_BYTES + 1 or not frame.startswith(QR_MAGIC):
-    raise AuthorizationError("invalid qr")
-  version, algorithm, id_length = frame[4], frame[5], frame[6]
-  if version != QR_VERSION or algorithm not in QR_ALGORITHMS or id_length == 0 or len(frame) != 7 + id_length + QR_KEY_ID_BYTES + QR_SESSION_BYTES + 1:
+  version, id_length = frame[len(QR_MAGIC)], frame[len(QR_MAGIC) + 1]
+  if version != QR_VERSION or id_length == 0 or len(frame) != header + id_length + QR_SESSION_BYTES + 1:
     raise AuthorizationError("invalid qr")
   try:
-    cloud_device_id = text_field(frame[7:7 + id_length].decode("utf-8"))
+    cloud_device_id = text_field(frame[header:header + id_length].decode("utf-8"))
   except UnicodeDecodeError as e:
     raise AuthorizationError("invalid qr") from e
-  key_start = 7 + id_length
-  return QrPayload(cloud_device_id, frame[key_start:key_start + QR_KEY_ID_BYTES],
-                   frame[key_start + QR_KEY_ID_BYTES:key_start + QR_KEY_ID_BYTES + QR_SESSION_BYTES],
-                   frame[-1], QR_ALGORITHMS[algorithm])
+  session_start = header + id_length
+  return QrPayload(cloud_device_id, frame[session_start:session_start + QR_SESSION_BYTES], frame[-1])
 
 
 def text_field(value: Any, maximum: int = 128) -> str:
@@ -268,11 +265,11 @@ class LocalAuthority:
           pass  # Corrupt/legacy storage is not authorization.
 
   def arm(self) -> str:
+    """Open one window and publish the code for it (see the frame note at the top of the module:
+    the code is a pointer, so minting one does not touch the identity key)."""
     with self.lock:
       session = secrets.token_bytes(QR_SESSION_BYTES)
-      algorithm = QR_ES256 if isinstance(self.device_key, ec.EllipticCurvePrivateKey) else QR_RS256
-      frame = qr_frame(self.cloud_device_id, key_id_bytes(self.device_key.public_key()), session, PAIRING_TTL_S, algorithm)
-      qr = encode64(frame) + "." + encode64(self._sign_frame(frame))
+      qr = encode64(qr_frame(self.cloud_device_id, session, PAIRING_TTL_S))
       now = self.clock()
       self.window = Window(encode64(session), now + PAIRING_TTL_S, now + PAIRING_TTL_S + PAIRING_DELIVERY_GRACE_S, qr)
       self._remember(self.window)
@@ -285,14 +282,6 @@ class LocalAuthority:
     now = self.clock()
     kept = [w for w in self.recent if w.nonce != window.nonce and now < w.usable_until]
     self.recent = (kept + [window])[-MAX_RECENT_SESSIONS:]
-
-  def _sign_frame(self, frame: bytes) -> bytes:
-    """ES256 signs get their raw r||s form, the compact encoding every peer can carry in 86
-    characters; the isinstance is also what narrows the key type for the call."""
-    if isinstance(self.device_key, ec.EllipticCurvePrivateKey):
-      r, s = decode_dss_signature(self.device_key.sign(frame, ec.ECDSA(hashes.SHA256())))
-      return r.to_bytes(32, "big") + s.to_bytes(32, "big")
-    return self.device_key.sign(frame, padding.PKCS1v15(), hashes.SHA256())
 
   def cancel(self) -> None:
     """The user cancelled (or the window was replaced): every session it could still be used for
@@ -323,7 +312,7 @@ class LocalAuthority:
       candidates = ([self.window] if self.window is not None else []) + self.recent
     if not any(w is not None and now < w.usable_until and secrets.compare_digest(w.nonce, nonce) for w in candidates):
       # Name the reason: this line is the only trace of an enrollment that referenced a code the
-      # device no longer honours, and the difference between "expired" and "never displayed" is
+      # device no longer honors, and the difference between "expired" and "never displayed" is
       # what tells a user to scan a fresh code instead of retrying the same one.
       raise AuthorizationError("pairing code expired")
 
@@ -342,8 +331,10 @@ class LocalAuthority:
     app_id = key_id(key)
     if data["key_id"] != app_id:
       raise AuthorizationError("wrong key")
+    # The nonce is the QR's own session field: the window this device is displaying decides it,
+    # and no other length is honored.
     nonce = text_field(data["pairing_session"], 43)
-    if len(decode64(nonce, max_bytes=32)) != 32:
+    if len(decode64(nonce, max_bytes=32)) != QR_SESSION_BYTES:
       raise AuthorizationError("invalid nonce")
     name = text_field(data["app_name"], 80)
     signed = statement("enroll", self.cloud_device_id, self.comma_device_id, self.device_key_id, nonce, public, app_id, name)

@@ -11,16 +11,14 @@ from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from cryptography import x509
-from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
-from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509.oid import NameOID
 
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.sunnypilot.sunnylink.athena.local_auth_v2 import (
-  PAIRING_DELIVERY_GRACE_S, PAIRING_TTL_S, AuthorizationError, Grant, LocalAuthority, Origin, connect_pinned, decode64,
-  decode_qr, encode64, key_id, key_id_bytes, parse_object, statement, verify_tls_peer,
+  PAIRING_DELIVERY_GRACE_S, PAIRING_TTL_S, QR_SESSION_BYTES, AuthorizationError, Grant, LocalAuthority, Origin,
+  connect_pinned, decode64, decode_qr, encode64, key_id, parse_object, qr_frame, statement, verify_tls_peer,
 )
 
 # The fields an enrollment signs, in the order the statement joins them.
@@ -60,38 +58,38 @@ class TestLocalAuthV2(OpenpilotTestCase):
     grant = self.authority.enroll(self.enrollment(), Origin.CLOUD)
     return self.authority.confirm(grant, grant.key_id)
 
-  def test_qr_is_signed_public_fresh_metadata_not_bearer(self):
-    parts = self.qr.split(".")
-    self.assertEqual(len(parts), 2)
-    frame = decode64(parts[0], max_bytes=256)
+  def test_qr_is_public_fresh_metadata_not_a_capability(self):
+    """The code names one device and one window; it carries no key, no signature and no secret."""
+    self.assertEqual(len(self.qr.split(".")), 1)
+    frame = decode64(self.qr)
     payload = decode_qr(self.qr)
     self.assertEqual(payload.cloud_device_id, self.authority.cloud_device_id)
-    self.assertEqual(payload.device_key_id, key_id_bytes(self.device_key.public_key()))
     self.assertEqual(payload.session, decode64(self.authority.window.nonce))
+    self.assertEqual(len(payload.session), QR_SESSION_BYTES)
     self.assertEqual(payload.ttl_s, 120)
-    self.assertEqual(payload.algorithm, "ES256")
-    # Public metadata, not a bearer capability: the app cross-checks every field against
-    # authenticated cloud details, and the code is worthless without the cloud enrollment.
-    self.assertEqual(decode_qr(self.qr).device_key_id, key_id_bytes(self.device_key.public_key()))
-    self.assertNotEqual(self.qr, self.authority.arm())
-    # Freshness is per window, and the signature covers the frame bytes only.
-    raw = decode64(parts[1])
-    self.assertEqual(len(raw), 64)
-    signature = encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big"))
-    self.device_key.public_key().verify(signature, frame, ec.ECDSA(hashes.SHA256()))
-    for wrong_key, wrong_frame in ((self.app_key.public_key(), frame), (self.device_key.public_key(), frame[:-1] + bytes([frame[-1] ^ 1]))):
-      with self.assertRaises(InvalidSignature):
-        wrong_key.verify(signature, wrong_frame, ec.ECDSA(hashes.SHA256()))
+    # Framing is exact: no padding, no extra field, no room for a key id or a signature.
+    self.assertEqual(frame, qr_frame(self.authority.cloud_device_id, payload.session, 120))
+    self.assertEqual(len(frame), len("SLEN") + 2 + len(self.authority.cloud_device_id) + QR_SESSION_BYTES + 1)
+    # Freshness is per window: re-arming publishes a different session.
+    self.assertNotEqual(decode_qr(self.authority.arm()).session, payload.session)
 
-  def test_rsa_device_identity_supported(self):
+  def test_the_code_is_readable_off_a_240px_panel_whatever_the_identity_key_is(self):
+    """An RSA identity key is what a real device has, and a device signature made the code 77
+    modules — 2.73 px/module on the mici panel, which is not scannable. Both key types mint the
+    same code now, and the identity key is still what proves the device to the phone."""
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    authority = LocalAuthority("cloud", "comma", key, self.writes.append)
+    authority = LocalAuthority("cloud-device", "comma-device", key, self.writes.append)
     qr = authority.arm()
-    frame, signature = (decode64(part, max_bytes=512) for part in qr.split("."))
+    self.assertEqual(len(qr), len(self.qr))
     payload = decode_qr(qr)
-    self.assertEqual(payload.algorithm, "RS256")
-    self.assertEqual(payload.device_key_id, key_id_bytes(key.public_key()))
-    key.public_key().verify(signature, frame, padding.PKCS1v15(), hashes.SHA256())
+    self.assertEqual(payload.cloud_device_id, "cloud-device")
+    self.assertEqual(payload.ttl_s, PAIRING_TTL_S)
+    challenge = encode64(bytes(32))
+    proof = authority.authenticate_device("phone-key", challenge)
+    self.assertEqual(proof["device_key_id"], authority.device_key_id)
+    expected = statement("authenticate-device", "cloud-device", "comma-device",
+                         authority.device_key_id, "phone-key", challenge)
+    key.public_key().verify(decode64(proof["signature"]), expected, padding.PKCS1v15(), hashes.SHA256())
 
   def test_device_authenticates_itself_to_the_phone_challenge(self):
     grant = self.committed()
@@ -180,9 +178,17 @@ class TestLocalAuthV2(OpenpilotTestCase):
     self.authority.arm()
     self.assertEqual(self.authority.enroll(raw, Origin.CLOUD), self.authority.pending)
 
+  def test_the_enrollment_nonce_is_the_code_session_and_nothing_else(self):
+    """The window mints a 16-byte session, so that is the only nonce an enrollment may name. Both
+    payloads below carry a valid signature over the altered field, so the refusal is this rule."""
+    for wrong in (encode64(b"x" * 32), encode64(b"x" * 8)):
+      with self.subTest(nonce=wrong), self.assertRaises(AuthorizationError):
+        self.authority.enroll(self.enrollment(pairing_session=wrong), Origin.CLOUD)
+    self.assertEqual(self.writes, [])
+
   def test_signature_binds_all_enrollment_fields(self):
     for field, value in (("app_name", "Other phone"), ("key_id", "other"), ("device_key_id", "other"), ("comma_device_id", "other"),
-                         ("cloud_device_id", "other"), ("pairing_session", encode64(b"x" * 32))):
+                         ("cloud_device_id", "other"), ("pairing_session", encode64(b"x" * QR_SESSION_BYTES))):
       with self.subTest(field=field):
         data = json.loads(self.enrollment())
         data[field] = value

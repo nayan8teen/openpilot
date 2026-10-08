@@ -287,9 +287,9 @@ def _service_pairing_window(params: Params) -> str | None:
   if authority.window is not None:
     # The code's displayed lifetime is over. Hide it — the UI closes its dialog on the cleared
     # param — but keep the session: an enrollment for the code the user just scanned can still be
-    # in flight through the cloud, which delivers on a later tick. Cancelling the session here is
-    # what made a scanned code fail with nothing shown on either side (the phone waited forever,
-    # the device said nothing). A cancel is different: it clears every session the user could have
+    # in flight through the cloud, which delivers on a later tick. Ending the session here is what
+    # made a scanned code fail with nothing shown on either side (the phone waited forever, the
+    # device said nothing). A cancel is different: it clears every session the user could have
     # scanned from.
     authority.expire()
     cloudlog.event("sunnylinkd.local_auth_v2.window_expired")

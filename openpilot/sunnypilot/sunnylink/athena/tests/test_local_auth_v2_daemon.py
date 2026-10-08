@@ -121,10 +121,10 @@ class TestLocalAuthV2Daemon(OpenpilotTestCase):
     authority.expire()                        # the code stops being displayed …
     self.store.put(local_auth_v2_daemon.CLOUD_ENROLL_KEY, raw)
 
-    local_auth_v2_daemon.claim_cloud_commands(self.store)
+    local_auth_v2_daemon.claim_cloud_commands(cast(Params, self.store))
 
     pending = local_auth_v2_daemon.pending_enrollment()
-    self.assertIsNotNone(pending)
+    assert pending is not None, "the late enrollment was not staged"
     self.assertEqual(key_id(self.app_key.public_key()), pending["key_id"])
     self.assertEqual("Test phone", pending["app_name"])
     # Claimed exactly once, whether or not it validated.
@@ -138,7 +138,7 @@ class TestLocalAuthV2Daemon(OpenpilotTestCase):
     self.store.put(local_auth_v2_daemon.CLOUD_ENROLL_KEY, raw)
 
     with mock.patch.object(authority, "clock", lambda: window.usable_until + 1):
-      local_auth_v2_daemon.claim_cloud_commands(self.store)
+      local_auth_v2_daemon.claim_cloud_commands(cast(Params, self.store))
 
     self.assertIsNone(local_auth_v2_daemon.pending_enrollment())
     self.assertIsNone(self.store.get(local_auth_v2_daemon.CLOUD_ENROLL_KEY))

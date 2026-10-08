@@ -705,8 +705,8 @@ class SunnylinkLocalQrPairingDialog(Widget):
     y += close_size + 40
 
     # Two columns, the layout the cloud pairing dialog uses: the QR takes half the width and the
-    # full height, which is 900px at this display's 2160x1080 — 17 px per module for the compact
-    # 53-module frame, read easily from the usual scanning distance.
+    # full height, which is 900px at this display's 2160x1080 — 31 px per module for the compact
+    # 29-module pointer, read easily from any scanning distance.
     left_width = int(content_rect.width * 0.5 - 15)
     right_width = int(content_rect.width // 2 - 20)
 
