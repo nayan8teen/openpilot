@@ -21,18 +21,40 @@ from enum import Enum
 from typing import Any
 from urllib.parse import urlsplit
 
-import jwt
 from websocket import WebSocket, create_connection
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 VERSION = 2
 AUTHENTICATE_PURPOSE = "sunnylink-local-authenticate"
 PAIRING_TTL_S = 120
 MAX_ENROLL_BYTES = 4096
 MAX_GRANTS = 8
+
+# The QR the app scans is a compact signed blob, not a JWT: this metadata is 494 characters of
+# JSON and base64 in a JWT, which is a 77-module code, and a 77-module code cannot be read off a
+# 536x240 panel. The same fields in a binary blob are ~200 characters (53 modules, 4.5 px/module
+# there) with every property kept: signed by the device identity key, fresh per window, and
+# carrying no bearer capability. Frame:
+#
+#   "SLEN" | version | algorithm | len(cloud id) | cloud id | key id (32) | session (32) | ttl
+#
+# and the QR is `<base64url frame>.<base64url signature over the frame bytes>`, the signature
+# being raw r||s for ES256 and PKCS#1 v1.5 DER for RS256. The comma device id is deliberately
+# absent: the app already gets it from the same authenticated cloud details it checks the key
+# against, and a second unauthenticated copy of it is one more thing to disagree with.
+QR_MAGIC = b"SLEN"
+QR_VERSION = 3
+QR_ES256 = 1
+QR_RS256 = 2
+QR_ALGORITHMS = {QR_ES256: "ES256", QR_RS256: "RS256"}
+QR_KEY_ID_BYTES = 32
+QR_SESSION_BYTES = 32
+MAX_QR_FRAME_BYTES = 256
+MAX_QR_SIGNATURE_BYTES = 512
 # The only RPCs an authenticated local session may ask for. Long-running operations are
 # deliberately absent.
 LOCAL_METHODS = frozenset({"getParams", "getParamsAllKeys", "getParamsMetadata", "getMessage", "saveParams",
@@ -79,9 +101,60 @@ def load_app_key(value: str) -> ec.EllipticCurvePublicKey:
   return key
 
 
-def key_id(key: ec.EllipticCurvePublicKey | rsa.RSAPublicKey) -> str:
+def key_id_bytes(key: ec.EllipticCurvePublicKey | rsa.RSAPublicKey) -> bytes:
   raw = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
-  return encode64(hashlib.sha256(raw).digest())
+  return hashlib.sha256(raw).digest()
+
+
+def key_id(key: ec.EllipticCurvePublicKey | rsa.RSAPublicKey) -> str:
+  return encode64(key_id_bytes(key))
+
+
+@dataclass(frozen=True)
+class QrPayload:
+  """What the app reads out of the scanned frame. Never authority on its own: the app checks the
+  key id against authenticated cloud device details before it uses any of it."""
+  cloud_device_id: str
+  device_key_id: bytes
+  session: bytes
+  ttl_s: int
+  algorithm: str
+
+
+def qr_frame(cloud_device_id: str, device_key_id: bytes, session: bytes, ttl_s: int, algorithm: int) -> bytes:
+  if algorithm not in QR_ALGORITHMS:
+    raise AuthorizationError("invalid qr algorithm")
+  if len(device_key_id) != QR_KEY_ID_BYTES or len(session) != QR_SESSION_BYTES:
+    raise AuthorizationError("invalid qr fields")
+  if not 0 < ttl_s < 256:
+    raise AuthorizationError("invalid qr ttl")
+  encoded = text_field(cloud_device_id).encode("utf-8")
+  if not 0 < len(encoded) < 256:
+    raise AuthorizationError("invalid cloud device id")
+  return QR_MAGIC + bytes([QR_VERSION, algorithm, len(encoded)]) + encoded + device_key_id + session + bytes([ttl_s])
+
+
+def decode_qr(raw: str) -> QrPayload:
+  """Parse a scanned QR frame. The signature is the app's to verify (it needs the device key from
+  the cloud); this validates the framing so no caller can disagree with [qr_frame]."""
+  parts = raw.split(".") if isinstance(raw, str) else []
+  if len(parts) != 2:
+    raise AuthorizationError("invalid qr")
+  frame = decode64(parts[0], max_bytes=MAX_QR_FRAME_BYTES)
+  decode64(parts[1], max_bytes=MAX_QR_SIGNATURE_BYTES)
+  if len(frame) < len(QR_MAGIC) + 3 + 1 + QR_KEY_ID_BYTES + QR_SESSION_BYTES + 1 or not frame.startswith(QR_MAGIC):
+    raise AuthorizationError("invalid qr")
+  version, algorithm, id_length = frame[4], frame[5], frame[6]
+  if version != QR_VERSION or algorithm not in QR_ALGORITHMS or id_length == 0 or len(frame) != 7 + id_length + QR_KEY_ID_BYTES + QR_SESSION_BYTES + 1:
+    raise AuthorizationError("invalid qr")
+  try:
+    cloud_device_id = text_field(frame[7:7 + id_length].decode("utf-8"))
+  except UnicodeDecodeError as e:
+    raise AuthorizationError("invalid qr") from e
+  key_start = 7 + id_length
+  return QrPayload(cloud_device_id, frame[key_start:key_start + QR_KEY_ID_BYTES],
+                   frame[key_start + QR_KEY_ID_BYTES:key_start + QR_KEY_ID_BYTES + QR_SESSION_BYTES],
+                   frame[-1], QR_ALGORITHMS[algorithm])
 
 
 def text_field(value: Any, maximum: int = 128) -> str:
@@ -177,14 +250,21 @@ class LocalAuthority:
 
   def arm(self) -> str:
     with self.lock:
-      payload = {"v": VERSION, "purpose": "sunnylink-local-enroll", "cloud_device_id": self.cloud_device_id,
-                 "comma_device_id": self.comma_device_id, "device_key_id": self.device_key_id,
-                 "pairing_session": encode64(secrets.token_bytes(32)), "ttl_s": PAIRING_TTL_S}
-      algorithm = "ES256" if isinstance(self.device_key, ec.EllipticCurvePrivateKey) else "RS256"
-      qr = jwt.encode(payload, self.device_key, algorithm=algorithm, headers={"typ": "sunnylink-local-enroll+jwt"})
-      self.window = Window(payload["pairing_session"], self.clock() + PAIRING_TTL_S, qr)
+      session = secrets.token_bytes(QR_SESSION_BYTES)
+      algorithm = QR_ES256 if isinstance(self.device_key, ec.EllipticCurvePrivateKey) else QR_RS256
+      frame = qr_frame(self.cloud_device_id, key_id_bytes(self.device_key.public_key()), session, PAIRING_TTL_S, algorithm)
+      qr = encode64(frame) + "." + encode64(self._sign_frame(frame))
+      self.window = Window(encode64(session), self.clock() + PAIRING_TTL_S, qr)
       self.pending = None
       return qr
+
+  def _sign_frame(self, frame: bytes) -> bytes:
+    """ES256 signs get their raw r||s form, the compact encoding every peer can carry in 86
+    characters; the isinstance is also what narrows the key type for the call."""
+    if isinstance(self.device_key, ec.EllipticCurvePrivateKey):
+      r, s = decode_dss_signature(self.device_key.sign(frame, ec.ECDSA(hashes.SHA256())))
+      return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    return self.device_key.sign(frame, padding.PKCS1v15(), hashes.SHA256())
 
   def cancel(self) -> None:
     with self.lock:

@@ -448,12 +448,10 @@ class LocalQrPairingDialogMici(BigDialogBase):
 
     subheader_color = rl.Color(255, 255, 255, int(255 * 0.9 * 0.65))
     # One label doubles as the instruction and the live status: 240px of height has no room for a
-    # title, an instruction, a status line and the payload text beside a full-height QR.
+    # title, an instruction and a status line beside a full-height QR. Scanning is the only way
+    # in, and this payload is not something anyone could type from a screen.
     self._hint = UnifiedLabel(tr("scan this code in the sunnylink app"), font_size=26,
                               text_color=subheader_color, line_height=0.9)
-    # The payload as text too: a phone that cannot scan can still enroll by typing it. Ten is the
-    # largest size the whole 494-character payload fits in beside a full-height QR on this display.
-    self._code = UnifiedLabel("", font_size=10, text_color=subheader_color, line_height=0.9)
 
   def _request_window(self) -> None:
     try:
@@ -476,8 +474,10 @@ class LocalQrPairingDialogMici(BigDialogBase):
     if not qr:
       return
     try:
-      # The mici UI draws on a dark background, so the QR needs inverted (light) modules.
-      self._qr_texture = make_texture(qr, inverted=True)
+      # Standard polarity (dark modules, the encoder's own light quiet zone), not light-on-dark:
+      # on a panel this small the code is dense enough already without asking every scanner to
+      # handle an inverted symbol too.
+      self._qr_texture = make_texture(qr)
       # The texture is drawn smaller than it is built, and the modules must stay hard-edged for
       # a camera to read them.
       rl.set_texture_filter(self._qr_texture, rl.TextureFilter.TEXTURE_FILTER_POINT)
@@ -499,11 +499,10 @@ class LocalQrPairingDialogMici(BigDialogBase):
     self._refresh_qr_texture(read_pairing_qr())
 
     rect = self._rect
-    # The QR takes the full height, the way the cloud pairing dialog sizes it and the only size a
-    # 77-module payload can be scanned at on this display. The pad is not decoration: this is an
-    # inverted (light-on-dark) code, so the dark panel around it is its quiet zone, and the spec
-    # wants four modules of it. 12px is four modules at this size. The text gets what is left.
-    pad = 12
+    # The QR takes the full height, the way the cloud pairing dialog sizes it and the only size the
+    # code can be scanned at on this display. Four pixels of margin is the border the panel needs;
+    # the quiet zone the scanner needs is inside the texture.
+    pad = 4
     qr_size = int(rect.height - 2 * pad)
     if self._qr_texture is not None:
       qr_rect = rl.Rectangle(rect.x + pad, rect.y + pad, qr_size, qr_size)
@@ -524,13 +523,6 @@ class LocalQrPairingDialogMici(BigDialogBase):
     self._hint.set_max_width(text_width)
     self._hint.set_position(text_x, rect.y + pad)
     self._hint.render()
-    y = rect.y + pad + int(self._hint.get_content_height(text_width)) + 8
-
-    if self._qr_string:
-      self._code.set_text(self._qr_string)
-      self._code.set_max_width(text_width)
-      self._code.set_position(text_x, y)
-      self._code.render()
 
   def __del__(self):
     if self._qr_texture is not None and self._qr_texture.id != 0:

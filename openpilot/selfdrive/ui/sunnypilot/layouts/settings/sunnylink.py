@@ -705,7 +705,8 @@ class SunnylinkLocalQrPairingDialog(Widget):
     y += close_size + 40
 
     # Two columns, the layout the cloud pairing dialog uses: the QR takes half the width and the
-    # full height. This payload is a 77-module code, so anything smaller than this cannot be read.
+    # full height, which is 900px at this display's 2160x1080 — 17 px per module for the compact
+    # 53-module frame, read easily from the usual scanning distance.
     left_width = int(content_rect.width * 0.5 - 15)
     right_width = int(content_rect.width // 2 - 20)
 
@@ -723,11 +724,12 @@ class SunnylinkLocalQrPairingDialog(Widget):
       source = rl.Rectangle(0, 0, self._qr_texture.width, self._qr_texture.height)
       rl.draw_texture_pro(self._qr_texture, source, qr_rect, rl.Vector2(0, 0), 0, rl.WHITE)
 
-    # Left column: what to do, then the payload as text, so a phone whose camera will not open
-    # can still enroll by typing it.
+    # Left column: what to do. The QR is the only way to enroll, so what matters here is that the
+    # steps are readable next to a code that is as large as the panel allows inside the QR's own
+    # calm zone.
     hint_font = gui_app.font(FontWeight.NORMAL)
     hints = [
-      tr("In the sunnylink app, open Local Connectivity → Add device."),
+      tr("In the sunnylink app, open Local Connectivity → Pair a device."),
       tr("Sign in to the same sunnypilot account on both."),
       tr("The code expires after 2 minutes."),
     ] if self._qr_texture is not None else [tr("Preparing a secure pairing code…")]
@@ -735,11 +737,6 @@ class SunnylinkLocalQrPairingDialog(Widget):
       wrapped = wrap_text(hint_font, hint, 38, left_width)
       rl.draw_text_ex(hint_font, "\n".join(wrapped), rl.Vector2(content_rect.x, y), 38, 0.0, rl.BLACK)
       y += len(wrapped) * 38 + 14
-
-    if self._qr_string:
-      code_lines = wrap_text(hint_font, self._qr_string, 26, left_width)
-      rl.draw_text_ex(hint_font, "\n".join(code_lines), rl.Vector2(content_rect.x, y), 26, 0.0, rl.BLACK)
-      y += len(code_lines) * 26 + 16
 
     discovered = latest_discovered_app()
     if discovered is not None:

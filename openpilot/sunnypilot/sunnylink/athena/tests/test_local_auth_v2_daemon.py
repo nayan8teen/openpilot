@@ -5,8 +5,6 @@ from pathlib import Path
 from typing import Any, cast
 from unittest import mock
 
-import jwt
-
 from openpilot.common.params import Params
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -89,7 +87,7 @@ class TestLocalAuthV2Daemon(OpenpilotTestCase):
     authority.arm()
     public = encode64(self.app_key.public_key().public_bytes(
       serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo))
-    nonce = jwt.decode(authority.window.qr, self.device_key.public_key(), algorithms=["ES256"])["pairing_session"]
+    nonce = authority.window.nonce
     data = {"v": 2, "cloud_device_id": authority.cloud_device_id, "comma_device_id": authority.comma_device_id,
             "device_key_id": authority.device_key_id, "pairing_session": nonce,
             "public_key": public, "key_id": key_id(self.app_key.public_key()), "app_name": "Test phone"}
@@ -271,7 +269,7 @@ class TestRegistryThroughRealParams(OpenpilotTestCase):
     authority = local_auth_v2_daemon.get_authority()
     self.assertIsNotNone(authority)
     authority.arm()
-    nonce = jwt.decode(authority.window.qr, self.device_key.public_key(), algorithms=["ES256"])["pairing_session"]
+    nonce = authority.window.nonce
     public = encode64(self.app_key.public_key().public_bytes(
       serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo))
     app_id = key_id(self.app_key.public_key())

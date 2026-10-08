@@ -1,5 +1,3 @@
-import base64
-import json
 from typing import Any, cast
 from unittest import mock
 
@@ -9,6 +7,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from openpilot.common.params import Params
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.sunnypilot.sunnylink.athena import local_auth_v2_daemon
+from openpilot.sunnypilot.sunnylink.athena.local_auth_v2 import decode_qr, encode64
 
 
 class _FakeParams:
@@ -75,13 +74,16 @@ class TestLocalAuthV2PairingWindow(OpenpilotTestCase):
 
   def test_arming_publishes_the_qr_and_clears_the_request(self):
     qr = self.arm()
-    # The QR is the JWT the app scans: it carries the device-signed window metadata.
-    payload = qr.split(".")[1]
-    self.assertEqual(2, json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))["v"])
+    # The QR is the compact device-signed frame the app scans.
+    payload = decode_qr(qr)
+    authority = local_auth_v2_daemon.get_authority()
+    self.assertEqual(payload.cloud_device_id, authority.cloud_device_id)
+    self.assertEqual(encode64(payload.device_key_id), authority.device_key_id)
+    self.assertEqual(encode64(payload.session), authority.window.nonce)
+    self.assertEqual(payload.ttl_s, 120)
     self.assertEqual(qr, self.published())
     # The request is consumed, so a UI restart cannot arm a second window by accident.
     self.assertNotIn(local_auth_v2_daemon.PAIRING_REQUEST_V2_KEY, self.store.values)
-    authority = local_auth_v2_daemon.get_authority()
     self.assertEqual(qr, authority.window.qr)
     self.assertIsNone(authority.pending)
 

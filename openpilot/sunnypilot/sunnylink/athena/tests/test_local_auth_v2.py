@@ -10,20 +10,29 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest import mock
 
-import jwt
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509.oid import NameOID
 
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.sunnypilot.sunnylink.athena.local_auth_v2 import (
-  AuthorizationError, Grant, LocalAuthority, Origin, connect_pinned, decode64, encode64, key_id, parse_object, statement, verify_tls_peer,
+  AuthorizationError, Grant, LocalAuthority, Origin, connect_pinned, decode64, decode_qr, encode64, key_id, key_id_bytes,
+  parse_object, statement, verify_tls_peer,
 )
 
 # The fields an enrollment signs, in the order the statement joins them.
 ENROLL_FIELDS = ("cloud_device_id", "comma_device_id", "device_key_id", "pairing_session",
                  "public_key", "key_id", "app_name")
+
+# A refused pin makes the connector hang up mid-handshake, so the server side of a real socket
+# sees the abort as one of these depending on whether it was reading or writing when the peer
+# went away. That race is not the property under test — the assertions that count are that the
+# client refused before any HTTP request and that the server received nothing (see below).
+ABORTED_CONNECTION_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError,
+                             ssl.SSLEOFError, ssl.SSLError)
 
 
 class TestLocalAuthV2(OpenpilotTestCase):
@@ -40,7 +49,7 @@ class TestLocalAuthV2(OpenpilotTestCase):
     public = encode64(app_key.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo))
     data = {"v": 2, "cloud_device_id": self.authority.cloud_device_id, "comma_device_id": self.authority.comma_device_id,
             "device_key_id": self.authority.device_key_id,
-            "pairing_session": jwt.decode(self.qr, self.device_key.public_key(), algorithms=["ES256"])["pairing_session"],
+            "pairing_session": encode64(decode_qr(self.qr).session),
             "public_key": public, "key_id": key_id(app_key.public_key()), "app_name": "Test phone"}
     data.update(changes)
     proof = statement("enroll", *(str(data[field]) for field in ENROLL_FIELDS))
@@ -52,19 +61,37 @@ class TestLocalAuthV2(OpenpilotTestCase):
     return self.authority.confirm(grant, grant.key_id)
 
   def test_qr_is_signed_public_fresh_metadata_not_bearer(self):
-    data = jwt.decode(self.qr, self.device_key.public_key(), algorithms=["ES256"])
-    self.assertEqual(set(data), {"v", "purpose", "cloud_device_id", "comma_device_id", "device_key_id", "pairing_session", "ttl_s"})
-    self.assertEqual(data["ttl_s"], 120)
-    self.assertEqual(len(decode64(data["pairing_session"])), 32)
+    parts = self.qr.split(".")
+    self.assertEqual(len(parts), 2)
+    frame = decode64(parts[0], max_bytes=256)
+    payload = decode_qr(self.qr)
+    self.assertEqual(payload.cloud_device_id, self.authority.cloud_device_id)
+    self.assertEqual(payload.device_key_id, key_id_bytes(self.device_key.public_key()))
+    self.assertEqual(payload.session, decode64(self.authority.window.nonce))
+    self.assertEqual(payload.ttl_s, 120)
+    self.assertEqual(payload.algorithm, "ES256")
+    # Public metadata, not a bearer capability: the app cross-checks every field against
+    # authenticated cloud details, and the code is worthless without the cloud enrollment.
+    self.assertEqual(decode_qr(self.qr).device_key_id, key_id_bytes(self.device_key.public_key()))
     self.assertNotEqual(self.qr, self.authority.arm())
-    with self.assertRaises(jwt.InvalidSignatureError):
-      jwt.decode(self.qr, self.app_key.public_key(), algorithms=["ES256"])
+    # Freshness is per window, and the signature covers the frame bytes only.
+    raw = decode64(parts[1])
+    self.assertEqual(len(raw), 64)
+    signature = encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big"))
+    self.device_key.public_key().verify(signature, frame, ec.ECDSA(hashes.SHA256()))
+    for wrong_key, wrong_frame in ((self.app_key.public_key(), frame), (self.device_key.public_key(), frame[:-1] + bytes([frame[-1] ^ 1]))):
+      with self.assertRaises(InvalidSignature):
+        wrong_key.verify(signature, wrong_frame, ec.ECDSA(hashes.SHA256()))
 
   def test_rsa_device_identity_supported(self):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     authority = LocalAuthority("cloud", "comma", key, self.writes.append)
-    payload = jwt.decode(authority.arm(), key.public_key(), algorithms=["RS256"])
-    self.assertEqual(payload["device_key_id"], key_id(key.public_key()))
+    qr = authority.arm()
+    frame, signature = (decode64(part, max_bytes=512) for part in qr.split("."))
+    payload = decode_qr(qr)
+    self.assertEqual(payload.algorithm, "RS256")
+    self.assertEqual(payload.device_key_id, key_id_bytes(key.public_key()))
+    key.public_key().verify(signature, frame, padding.PKCS1v15(), hashes.SHA256())
 
   def test_device_authenticates_itself_to_the_phone_challenge(self):
     grant = self.committed()
@@ -252,7 +279,9 @@ class TestLocalAuthV2(OpenpilotTestCase):
           received = []
           errors = []
 
-          def serve(listener=listener, received=received, errors=errors):
+          # Every loop-scoped name is bound as a default argument: this runs on another thread
+          # while the enclosing loop moves on to the next case.
+          def serve(listener=listener, received=received, errors=errors, valid=valid):
             try:
               incoming, _ = listener.accept()
               with incoming, context.wrap_socket(incoming, server_side=True) as tls:
@@ -273,6 +302,11 @@ class TestLocalAuthV2(OpenpilotTestCase):
                 tls.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
                              f"Sec-WebSocket-Accept: {accept}\r\nSec-WebSocket-Protocol: sunnylink-local-v2\r\n\r\n").encode())
                 tls.recv(4096)  # Client close frame.
+            except ABORTED_CONNECTION_ERRORS as e:
+              # Expected only when the client is the one that refuses: an error here in the
+              # valid case is a real failure.
+              if valid:
+                errors.append(e)
             except Exception as e:
               errors.append(e)
 
@@ -290,13 +324,21 @@ class TestLocalAuthV2(OpenpilotTestCase):
           finally:
             thread.join(timeout=6)
           self.assertFalse(thread.is_alive())
+          # An abort other than the client's own refusal is a failure in both cases.
           self.assertEqual(errors, [])
-          self.assertEqual(len(received), 1)
           if valid:
+            # The accepted path is strict: the handshake completes, exactly one request arrives
+            # and it carries no credential header.
+            self.assertEqual(len(received), 1)
             self.assertTrue(b"GET / HTTP/1.1" in received[0])
             self.assertNotIn(b"Authorization", received[0])
           else:
-            self.assertEqual(received[0], b"")
+            # Refusing the pin races the server's own handshake, so the server either lost the
+            # connection inside `wrap_socket` (nothing recorded) or saw a socket the client
+            # closed without a request (one empty record). The property that matters is the same
+            # in both: not one byte of HTTP reached the server.
+            self.assertLessEqual(len(received), 1)
+            self.assertEqual([piece for piece in received if piece], [])
 
   def test_tls_pin_checks_key_not_name(self):
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "sunnylink mobile")])
