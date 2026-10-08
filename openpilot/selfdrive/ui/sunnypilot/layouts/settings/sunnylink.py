@@ -674,6 +674,9 @@ class SunnylinkLocalQrPairingDialog(Widget):
       return
     try:
       self._qr_texture = make_texture(qr)
+      # The texture is drawn smaller than it is built, and the modules must stay hard-edged for
+      # a camera to read them.
+      rl.set_texture_filter(self._qr_texture, rl.TextureFilter.TEXTURE_FILTER_POINT)
     except Exception:
       cloudlog.exception("sunnylink.local_pairing_v2.qr_texture_failed")
 
@@ -699,38 +702,44 @@ class SunnylinkLocalQrPairingDialog(Widget):
     pad = 20
     close_rect = rl.Rectangle(content_rect.x - pad, y - pad, close_size + pad * 2, close_size + pad * 2)
     self._close_btn.render(close_rect)
-    y += close_size + 30
+    y += close_size + 40
+
+    # Two columns, the layout the cloud pairing dialog uses: the QR takes half the width and the
+    # full height. This payload is a 77-module code, so anything smaller than this cannot be read.
+    left_width = int(content_rect.width * 0.5 - 15)
+    right_width = int(content_rect.width // 2 - 20)
 
     title_font = gui_app.font(FontWeight.NORMAL)
-    title_wrapped = wrap_text(title_font, tr("Pair with mobile app (secure)"), 70, int(content_rect.width))
+    title_wrapped = wrap_text(title_font, tr("Pair with mobile app (secure)"), 70, left_width)
     rl.draw_text_ex(title_font, "\n".join(title_wrapped), rl.Vector2(content_rect.x, y), 70, 0.0, rl.BLACK)
-    y += len(title_wrapped) * 70 + 30
+    y += len(title_wrapped) * 70 + 40
 
+    qr_size = int(min(right_width, content_rect.height) - 40)
+    qr_rect = rl.Rectangle(content_rect.x + left_width + 40 + (right_width - qr_size) / 2,
+                           content_rect.y, qr_size, qr_size)
+    card = rl.Rectangle(qr_rect.x - 10, qr_rect.y - 10, qr_rect.width + 20, qr_rect.height + 20)
+    rl.draw_rectangle_rounded(card, 0.05, 10, rl.WHITE)
     if self._qr_texture is not None:
-      # Reserved below the QR: the code text, the hints and the discovered-app status line.
-      qr_size = max(min(int(content_rect.width * 0.4), content_rect.height - (y - content_rect.y) - 420), 160)
-      qr_rect = rl.Rectangle(content_rect.x + (content_rect.width - qr_size) / 2, y, qr_size, qr_size)
-      card = rl.Rectangle(qr_rect.x - 10, qr_rect.y - 10, qr_rect.width + 20, qr_rect.height + 20)
-      rl.draw_rectangle_rounded(card, 0.05, 10, rl.WHITE)
       source = rl.Rectangle(0, 0, self._qr_texture.width, self._qr_texture.height)
       rl.draw_texture_pro(self._qr_texture, source, qr_rect, rl.Vector2(0, 0), 0, rl.WHITE)
-      y += qr_size + 24
-      # The payload as text too: a phone that cannot scan can still enroll by typing it.
-      code_font = gui_app.font(FontWeight.NORMAL)
-      code_lines = wrap_text(code_font, self._qr_string or "", 26, int(content_rect.width))
-      rl.draw_text_ex(code_font, "\n".join(code_lines), rl.Vector2(content_rect.x, y), 26, 0.0, rl.BLACK)
-      y += len(code_lines) * 26 + 20
 
+    # Left column: what to do, then the payload as text, so a phone whose camera will not open
+    # can still enroll by typing it.
     hint_font = gui_app.font(FontWeight.NORMAL)
     hints = [
-      tr("Open sunnylink on your phone, go to Local Connectivity and choose Add device."),
-      tr("Sign in to the same sunnypilot account — it authorizes the phone for this device."),
-      tr("This code expires after 2 minutes and can be cancelled here."),
+      tr("In the sunnylink app, open Local Connectivity → Add device."),
+      tr("Sign in to the same sunnypilot account on both."),
+      tr("The code expires after 2 minutes."),
     ] if self._qr_texture is not None else [tr("Preparing a secure pairing code…")]
     for hint in hints:
-      wrapped = wrap_text(hint_font, hint, 45, int(content_rect.width))
-      rl.draw_text_ex(hint_font, "\n".join(wrapped), rl.Vector2(content_rect.x, y), 45, 0.0, rl.BLACK)
-      y += len(wrapped) * 45 + 16
+      wrapped = wrap_text(hint_font, hint, 38, left_width)
+      rl.draw_text_ex(hint_font, "\n".join(wrapped), rl.Vector2(content_rect.x, y), 38, 0.0, rl.BLACK)
+      y += len(wrapped) * 38 + 14
+
+    if self._qr_string:
+      code_lines = wrap_text(hint_font, self._qr_string, 26, left_width)
+      rl.draw_text_ex(hint_font, "\n".join(code_lines), rl.Vector2(content_rect.x, y), 26, 0.0, rl.BLACK)
+      y += len(code_lines) * 26 + 16
 
     discovered = latest_discovered_app()
     if discovered is not None:

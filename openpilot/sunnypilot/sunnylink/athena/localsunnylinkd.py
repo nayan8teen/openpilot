@@ -49,7 +49,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_pairing import (
   set_local_app_alias,
   verify_pairing_code,
 )
-from openpilot.sunnypilot.sunnylink.athena.sunnylinkd import SUNNYLINK_RECONNECT_TIMEOUT_S, Sunnylinkd
+from openpilot.sunnypilot.sunnylink.athena.sunnylinkd import SUNNYLINK_RECONNECT_TIMEOUT_S, Sunnylinkd, log_connection_error
 
 LOCAL_ENABLED_PARAM = "SunnylinkLocalEnabled"
 SESSION_READ_TIMEOUT_S = 5
@@ -76,6 +76,7 @@ class LocalSunnylinkd(Sunnylinkd):
     self.discovery = discovery if discovery is not None else LocalDiscovery(pairing_window_cb=self.pairing_window_open)
     self.code_rotator = PairingCodeRotator()
     self.active_endpoint: str | None = None
+    self.active_ws: WebSocket | None = None
     self.backoffs: dict[str, float] = {}
     self.stop_event = threading.Event()
 
@@ -129,8 +130,13 @@ class LocalSunnylinkd(Sunnylinkd):
   # --- loop ---------------------------------------------------------------
 
   def serviceable(self) -> bool:
-    """Serve the LAN while sunnylink is on and this process has not been switched off."""
-    return super().serviceable() and self.params.get_bool(LOCAL_ENABLED_PARAM)
+    """Serve the LAN while sunnylink is on, this process is switched on, and there is no fault.
+
+    A locally paired device is often not cloud-registered at all, so registration is not part of
+    this: the cloud daemon waits for it, the local one never does.
+    """
+    return self.params.get_bool("SunnylinkEnabled") and not self.params.get_bool("SunnylinkTempFault") \
+       and self.params.get_bool(LOCAL_ENABLED_PARAM)
 
   def run(self, exit_event: threading.Event | None = None) -> None:
     self.discovery.start()
@@ -194,7 +200,7 @@ class LocalSunnylinkd(Sunnylinkd):
     except Exception as e:
       self.backoffs[endpoint] = time.monotonic() + ENDPOINT_BACKOFF_S
       self.params.remove("LastSunnylinkPingTime")
-      self.log_connection_error(e)
+      log_connection_error(e)
       return
 
     self.backoffs.pop(endpoint, None)
@@ -213,7 +219,7 @@ class LocalSunnylinkd(Sunnylinkd):
     except Exception as e:
       self.backoffs[endpoint] = time.monotonic() + ENDPOINT_BACKOFF_S
       self.params.remove("LastSunnylinkPingTime")
-      self.log_connection_error(e)
+      log_connection_error(e)
       return
 
     cloudlog.event("sunnylinkd.local.connected", endpoint=endpoint, pairing=pairing)
@@ -229,7 +235,7 @@ class LocalSunnylinkd(Sunnylinkd):
     except (KeyboardInterrupt, SystemExit):
       raise
     except Exception as e:
-      self.log_connection_error(e)
+      log_connection_error(e)
     finally:
       self.active_endpoint = None
       self.active_ws = None

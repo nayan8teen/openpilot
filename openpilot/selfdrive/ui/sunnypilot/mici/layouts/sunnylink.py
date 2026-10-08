@@ -446,16 +446,13 @@ class LocalQrPairingDialogMici(BigDialogBase):
     self._request_window()
     self.set_back_callback(self._cancel)
 
-    header_color = rl.Color(255, 255, 255, int(255 * 0.9))
     subheader_color = rl.Color(255, 255, 255, int(255 * 0.9 * 0.65))
-    self._title = UnifiedLabel(tr("pair app (secure)"), font_size=48, font_weight=FontWeight.BOLD,
-                               text_color=header_color, line_height=0.8)
-    self._hint = UnifiedLabel(tr("scan this code in the sunnylink app"), font_size=32,
+    # One label doubles as the instruction and the live status: 240px of height has no room for a
+    # title, an instruction, a status line and the payload text beside a full-height QR.
+    self._hint = UnifiedLabel(tr("scan this code in the sunnylink app"), font_size=26,
                               text_color=subheader_color, line_height=0.9)
     # The payload as text too: a phone that cannot scan can still enroll by typing it.
-    self._code = UnifiedLabel("", font_size=22, text_color=subheader_color, line_height=0.9)
-    self._status = UnifiedLabel("", font_size=28,
-                                text_color=rl.Color(255, 255, 255, int(255 * 0.45)), line_height=0.9)
+    self._code = UnifiedLabel("", font_size=14, text_color=subheader_color, line_height=0.9)
 
   def _request_window(self) -> None:
     try:
@@ -480,6 +477,9 @@ class LocalQrPairingDialogMici(BigDialogBase):
     try:
       # The mici UI draws on a dark background, so the QR needs inverted (light) modules.
       self._qr_texture = make_texture(qr, inverted=True)
+      # The texture is drawn smaller than it is built, and the modules must stay hard-edged for
+      # a camera to read them.
+      rl.set_texture_filter(self._qr_texture, rl.TextureFilter.TEXTURE_FILTER_POINT)
     except Exception:
       cloudlog.exception("sunnylink.local_pairing_v2.qr_texture_failed")
 
@@ -497,45 +497,37 @@ class LocalQrPairingDialogMici(BigDialogBase):
   def _render(self, _):
     self._refresh_qr_texture(read_pairing_qr())
 
-    discovered = latest_discovered_app()
-    if discovered is not None:
-      endpoint, age = discovered
-      self._status.set_text(endpoint if age < 2 else f"{endpoint} ({age}s)")
-      self._status.set_text_color(rl.Color(0, 255, 0, 255))
-    else:
-      self._status.set_text(tr("waiting for the phone…"))
-      self._status.set_text_color(rl.Color(255, 255, 255, int(255 * 0.45)))
-
-    x = self._rect.x + 20
-    width = int(self._rect.width - 40)
-    self._title.set_max_width(width)
-    self._title.set_position(x, self._rect.y + 40)
-    self._title.render()
-
-    # Reserve room below the QR for the code text, the hint and the status line.
-    qr_size = max(min(self._rect.height - 450, self._rect.width - 120), 120)
-    y = self._rect.y + 120 + qr_size + 20
+    rect = self._rect
+    pad = 8
+    # The QR takes the full height, the way the cloud pairing dialog sizes it and the only size a
+    # 77-module payload can be scanned at on this display. The text gets what is left.
+    qr_size = int(rect.height - 2 * pad)
     if self._qr_texture is not None:
-      qr_rect = rl.Rectangle(self._rect.x + (self._rect.width - qr_size) / 2, self._rect.y + 120,
-                             qr_size, qr_size)
+      qr_rect = rl.Rectangle(rect.x + pad, rect.y + pad, qr_size, qr_size)
       source = rl.Rectangle(0, 0, self._qr_texture.width, self._qr_texture.height)
       rl.draw_texture_pro(self._qr_texture, source, qr_rect, rl.Vector2(0, 0), 0, rl.WHITE)
 
+    text_x = int(rect.x + pad + qr_size + 20)
+    text_width = int(rect.x + rect.width - pad - text_x)
+
+    discovered = latest_discovered_app()
+    if discovered is not None:
+      endpoint, age = discovered
+      self._hint.set_text(endpoint if age < 2 else f"{endpoint} ({age}s)")
+      self._hint.set_text_color(rl.Color(0, 255, 0, 255))
+    else:
+      self._hint.set_text(tr("scan this code in the sunnylink app"))
+      self._hint.set_text_color(rl.Color(255, 255, 255, int(255 * 0.9 * 0.65)))
+    self._hint.set_max_width(text_width)
+    self._hint.set_position(text_x, rect.y + pad)
+    self._hint.render()
+    y = rect.y + pad + int(self._hint.get_content_height(text_width)) + 8
+
     if self._qr_string:
       self._code.set_text(self._qr_string)
-      self._code.set_max_width(width)
-      self._code.set_position(x, y)
+      self._code.set_max_width(text_width)
+      self._code.set_position(text_x, y)
       self._code.render()
-      y += int(self._code.get_content_height(width)) + 16
-
-    self._hint.set_max_width(width)
-    self._hint.set_position(x, y)
-    self._hint.render()
-    y += int(self._hint.get_content_height(width)) + 16
-
-    self._status.set_max_width(width)
-    self._status.set_position(x, y)
-    self._status.render()
 
   def __del__(self):
     if self._qr_texture is not None and self._qr_texture.id != 0:
