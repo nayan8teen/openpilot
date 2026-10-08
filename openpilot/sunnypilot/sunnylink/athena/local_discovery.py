@@ -73,9 +73,9 @@ class LocalDiscovery(threading.Thread):
   """
   Passive UDP listener
 
-  - While a pairing window is armed: track the freshest app beacon so the
-    daemon can offer pairing to a NEW app, and mirror it into a status param
-    for the settings UI.
+  - While a pairing window is armed (legacy PIN or the v2 QR window): track the
+    freshest app beacon so the daemon can offer pairing to a NEW app, and mirror
+    it into a status param for the settings UI.
   - Independently of any window: a beacon from an app ALREADY in the paired
     registry refreshes its cached endpoint — IPs are not identity, the app can
     move between networks.
@@ -83,18 +83,25 @@ class LocalDiscovery(threading.Thread):
 
   def __init__(self, params: Params | None = None, port: int = SUNNYLINK_LOCAL_UDP_PORT,
                sock: socket.socket | None = None, write_interval_s: float = 5.0,
-               paired_refresh_cb: Callable[[AppBeacon], None] | None = None):
+               paired_refresh_cb: Callable[[AppBeacon], None] | None = None,
+               pairing_window_cb: Callable[[], bool] | None = None):
     super().__init__(name="local_discovery_listener", daemon=True)
     self.params = params or Params()
     self.port = port
     self._sock = sock
     self.paired_refresh_cb = paired_refresh_cb
+    # A v2 window is not the legacy request flag, so the status line needs to see both.
+    self.pairing_window_cb = pairing_window_cb
     self._latest_endpoint: str | None = None
     self._latest_app_id: str | None = None
     self._last_seen_monotonic: float = 0.0
     self._latest_paired_endpoint: str | None = None
     self._latest_paired_app_id: str | None = None
     self._last_paired_seen_monotonic: float = 0.0
+    # Every beacon heard recently, keyed by endpoint: a v2 dial finds its phone by TLS key, not
+    # by app_id, so it cannot rely on the pairing-window trackers above.
+    self._recent_beacons: dict[str, tuple[str, float]] = {}
+    self._recent_lock = threading.Lock()
     self._lock = threading.Lock()
     self._stop_event = threading.Event()
     self.write_interval_s = write_interval_s
@@ -145,11 +152,43 @@ class LocalDiscovery(threading.Thread):
         return None
       return time.monotonic() - self._last_paired_seen_monotonic
 
+  def fresh_endpoints(self, max_age_s: float = LOCAL_BEACON_FRESH_S) -> list[str]:
+    """Endpoints of every beacon heard within max_age_s, freshest first.
+
+    Unlike the pairing-window/paired trackers, this is not gated on legacy registry
+    state: the v2 dial path needs to reach apps whose identity is a TLS key, not an
+    app_id it already knows.
+    """
+    now = time.monotonic()
+    with self._recent_lock:
+      self._recent_beacons = {endpoint: entry for endpoint, entry in self._recent_beacons.items()
+                              if now - entry[1] <= max_age_s}
+      recent = sorted(self._recent_beacons.items(), key=lambda item: item[1][1], reverse=True)
+    return [endpoint for endpoint, _ in recent]
+
+  def _record_beacon(self, beacon: AppBeacon) -> None:
+    with self._recent_lock:
+      self._recent_beacons[beacon.endpoint] = (beacon.app_id, time.monotonic())
+
+  def _pairing_window_open(self) -> bool:
+    """True while ANY pairing window is open: the legacy request flag, or a published v2 QR."""
+    if pairing_requested(self.params):
+      return True
+    callback = self.pairing_window_cb
+    if callback is None:
+      return False
+    try:
+      return bool(callback())
+    except Exception:
+      cloudlog.exception("local_discovery.pairing_window_cb.exception")
+      return False
+
   def _handle(self, raw: bytes, source_ip: str) -> None:
     beacon = parse_beacon(raw, source_ip)
     if beacon is None:
       return
-    if pairing_requested(self.params):
+    self._record_beacon(beacon)
+    if self._pairing_window_open():
       with self._lock:
         self._latest_endpoint = beacon.endpoint
         self._latest_app_id = beacon.app_id
