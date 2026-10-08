@@ -451,8 +451,9 @@ class LocalQrPairingDialogMici(BigDialogBase):
     # title, an instruction, a status line and the payload text beside a full-height QR.
     self._hint = UnifiedLabel(tr("scan this code in the sunnylink app"), font_size=26,
                               text_color=subheader_color, line_height=0.9)
-    # The payload as text too: a phone that cannot scan can still enroll by typing it.
-    self._code = UnifiedLabel("", font_size=14, text_color=subheader_color, line_height=0.9)
+    # The payload as text too: a phone that cannot scan can still enroll by typing it. Ten is the
+    # largest size the whole 494-character payload fits in beside a full-height QR on this display.
+    self._code = UnifiedLabel("", font_size=10, text_color=subheader_color, line_height=0.9)
 
   def _request_window(self) -> None:
     try:
@@ -498,9 +499,11 @@ class LocalQrPairingDialogMici(BigDialogBase):
     self._refresh_qr_texture(read_pairing_qr())
 
     rect = self._rect
-    pad = 8
     # The QR takes the full height, the way the cloud pairing dialog sizes it and the only size a
-    # 77-module payload can be scanned at on this display. The text gets what is left.
+    # 77-module payload can be scanned at on this display. The pad is not decoration: this is an
+    # inverted (light-on-dark) code, so the dark panel around it is its quiet zone, and the spec
+    # wants four modules of it. 12px is four modules at this size. The text gets what is left.
+    pad = 12
     qr_size = int(rect.height - 2 * pad)
     if self._qr_texture is not None:
       qr_rect = rl.Rectangle(rect.x + pad, rect.y + pad, qr_size, qr_size)
