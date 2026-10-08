@@ -19,8 +19,8 @@ from cryptography.x509.oid import NameOID
 
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.sunnypilot.sunnylink.athena.local_auth_v2 import (
-  AuthorizationError, Grant, LocalAuthority, Origin, connect_pinned, decode64, decode_qr, encode64, key_id, key_id_bytes,
-  parse_object, statement, verify_tls_peer,
+  PAIRING_DELIVERY_GRACE_S, PAIRING_TTL_S, AuthorizationError, Grant, LocalAuthority, Origin, connect_pinned, decode64,
+  decode_qr, encode64, key_id, key_id_bytes, parse_object, statement, verify_tls_peer,
 )
 
 # The fields an enrollment signs, in the order the statement joins them.
@@ -129,26 +129,56 @@ class TestLocalAuthV2(OpenpilotTestCase):
       self.authority.enroll(self.enrollment(ec.generate_private_key(ec.SECP256R1())), Origin.CLOUD)
     self.assertEqual(self.authority.pending, grant)
 
-  def test_enrollment_expires_before_acceptance_and_before_commit(self):
+  def test_a_late_enrollment_lands_inside_its_delivery_grace(self):
+    """The cloud is store-and-forward: the enrollment for the code the user scanned reaches the
+    device after that code has left its screen, and it still has to enroll and still has to be
+    committable over the pinned dial. Every step below used to fail silently."""
     grant = self.authority.enroll(self.enrollment(), Origin.CLOUD)
-    self.now = 130.0
-    for operation in (lambda: self.authority.enroll(self.enrollment(), Origin.CLOUD), lambda: self.authority.confirm(grant, grant.key_id)):
-      with self.assertRaises(AuthorizationError):
-        operation()
+    self.authority.expire()               # the code left the screen …
+    self.now = PAIRING_TTL_S + 1          # … and its scannable lifetime ended
+    self.assertEqual(self.authority.confirm(grant, grant.key_id), grant)
+    self.assertEqual(len(self.writes), 1)
+
+  def test_an_enrollment_past_the_delivery_grace_is_refused(self):
+    self.authority.expire()
+    window = self.authority.recent[-1]
+    self.assertEqual(window.usable_until, window.deadline + PAIRING_DELIVERY_GRACE_S)
+    self.now = window.usable_until + 1
+    with self.assertRaises(AuthorizationError):
+      self.authority.enroll(self.enrollment(), Origin.CLOUD)
     self.assertEqual(self.writes, [])
 
-  def test_cancel_rearm_and_restart_invalidate_old_enrollment(self):
+  def test_cancelling_a_window_refuses_an_in_flight_enrollment(self):
+    grant = self.authority.enroll(self.enrollment(), Origin.CLOUD)
+    self.authority.expire()
+    self.authority.cancel()
+    with self.assertRaises(AuthorizationError):
+      self.authority.enroll(self.enrollment(), Origin.CLOUD)
+    with self.assertRaises(AuthorizationError):
+      self.authority.confirm(grant, grant.key_id)
+    self.assertEqual(self.writes, [])
+
+  def test_cancel_and_restart_invalidate_an_old_enrollment(self):
     raw = self.enrollment()
     grant = self.authority.enroll(raw, Origin.CLOUD)
     self.authority.cancel()
     with self.assertRaises(AuthorizationError):
       self.authority.confirm(grant, grant.key_id)
-    self.authority.arm()
     with self.assertRaises(AuthorizationError):
       self.authority.enroll(raw, Origin.CLOUD)
     restarted = LocalAuthority("cloud-device", "comma-device", self.device_key, self.writes.append)
     with self.assertRaises(AuthorizationError):
       restarted.enroll(raw, Origin.CLOUD)
+    self.assertEqual(self.writes, [])
+
+  def test_a_rearm_keeps_the_previous_code_in_flight(self):
+    """A user who retries gets a fresh code. The enrollment for the code they scanned first can
+    still be on its way through the cloud, so a re-arm must not invalidate it."""
+    raw = self.enrollment()
+    self.assertIsNotNone(self.authority.enroll(raw, Origin.CLOUD))
+    self.authority.expire()
+    self.authority.arm()
+    self.assertEqual(self.authority.enroll(raw, Origin.CLOUD), self.authority.pending)
 
   def test_signature_binds_all_enrollment_fields(self):
     for field, value in (("app_name", "Other phone"), ("key_id", "other"), ("device_key_id", "other"), ("comma_device_id", "other"),

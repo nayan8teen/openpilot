@@ -112,6 +112,37 @@ class TestLocalAuthV2Daemon(OpenpilotTestCase):
   def registry(self) -> dict[str, Any]:
     return self.store.values[local_auth_v2_daemon.V2_REGISTRY_KEY]
 
+  def test_a_late_cloud_enrollment_from_an_expired_code_still_enrolls(self):
+    """The path an app's push actually takes: the gateway stored the settings-write, the local
+    half claims it on a later tick, and by then the scanned code has left the device screen. This
+    is what used to be dropped with only a log line, leaving the app waiting forever."""
+    authority = local_auth_v2_daemon.get_authority()
+    raw = self.enrollment(authority)          # the app scanned the armed code
+    authority.expire()                        # the code stops being displayed …
+    self.store.put(local_auth_v2_daemon.CLOUD_ENROLL_KEY, raw)
+
+    local_auth_v2_daemon.claim_cloud_commands(self.store)
+
+    pending = local_auth_v2_daemon.pending_enrollment()
+    self.assertIsNotNone(pending)
+    self.assertEqual(key_id(self.app_key.public_key()), pending["key_id"])
+    self.assertEqual("Test phone", pending["app_name"])
+    # Claimed exactly once, whether or not it validated.
+    self.assertIsNone(self.store.get(local_auth_v2_daemon.CLOUD_ENROLL_KEY))
+
+  def test_a_cloud_enrollment_for_a_code_past_its_grace_is_refused(self):
+    authority = local_auth_v2_daemon.get_authority()
+    raw = self.enrollment(authority)
+    window = authority.recent[-1]
+    authority.expire()
+    self.store.put(local_auth_v2_daemon.CLOUD_ENROLL_KEY, raw)
+
+    with mock.patch.object(authority, "clock", lambda: window.usable_until + 1):
+      local_auth_v2_daemon.claim_cloud_commands(self.store)
+
+    self.assertIsNone(local_auth_v2_daemon.pending_enrollment())
+    self.assertIsNone(self.store.get(local_auth_v2_daemon.CLOUD_ENROLL_KEY))
+
   def test_cloud_enroll_stages_and_tls_confirm_persists(self):
     summary = local_auth_v2_daemon.cloud_enroll(self.enrollment(local_auth_v2_daemon.get_authority()))
     # Staged: nothing durable until the TLS peer proves possession.

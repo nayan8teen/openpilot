@@ -285,7 +285,16 @@ def _service_pairing_window(params: Params) -> str | None:
     return armed
 
   if authority.window is not None:
-    cancel_local_pairing_v2()
+    # The code's displayed lifetime is over. Hide it — the UI closes its dialog on the cleared
+    # param — but keep the session: an enrollment for the code the user just scanned can still be
+    # in flight through the cloud, which delivers on a later tick. Cancelling the session here is
+    # what made a scanned code fail with nothing shown on either side (the phone waited forever,
+    # the device said nothing). A cancel is different: it clears every session the user could have
+    # scanned from.
+    authority.expire()
+    cloudlog.event("sunnylinkd.local_auth_v2.window_expired")
+
+  authority.prune_sessions()
 
   if not requested:
     if published is not None:
@@ -334,11 +343,17 @@ def claim_cloud_commands(params: Params | None = None) -> None:
     if value is None:
       continue
     try:
-      apply(value)
+      summary = apply(value)
     except AuthorizationError as e:
       cloudlog.warning(f"sunnylinkd.local_auth_v2.{key}_rejected: {e}")
     except Exception:
       cloudlog.exception(f"sunnylinkd.local_auth_v2.{key}_failed")
+    else:
+      # An enrollment is staged here and only becomes durable when the phone's pinned TLS dial
+      # proves its key, but the event still records that the command landed. Without it a
+      # successful arrival is invisible and a rejected one looks like nothing happened at all.
+      app_name = summary.get("app_name") if isinstance(summary, dict) else None
+      cloudlog.event(f"sunnylinkd.local_auth_v2.{key}_accepted", app_name=app_name)
 
 
 def _take(params: Params, key: str) -> str | None:

@@ -112,16 +112,23 @@ class TestLocalAuthV2PairingWindow(OpenpilotTestCase):
     self.assertIsNone(self.published())
     self.assertIsNone(local_auth_v2_daemon.get_authority().window)
 
-  def test_an_expired_window_is_dropped_and_unpublished(self):
+  def test_an_expired_window_is_hidden_but_its_session_survives_the_tick(self):
     self.arm()
     authority = local_auth_v2_daemon.get_authority()
     window = authority.window
     with mock.patch.object(authority, "clock", lambda: window.deadline + 1):
       self.assertIsNone(local_auth_v2_daemon.service_pairing_window(self.params))
     self.assertIsNone(self.published())
-    # An expired window (and any grant it staged) never lingers as authorization.
+    # The code is off the screen, so it can no longer be scanned — but an enrollment for it may
+    # still be travelling through the cloud, so the session outlives the displayed window. Only
+    # the window itself (and any grant it staged) is gone.
     self.assertIsNone(authority.window)
+    self.assertEqual([w.nonce for w in authority.recent], [window.nonce])
     self.assertIsNone(authority.pending)
+    # Past the delivery grace the session is forgotten too.
+    with mock.patch.object(authority, "clock", lambda: window.usable_until + 1):
+      self.assertIsNone(local_auth_v2_daemon.service_pairing_window(self.params))
+    self.assertEqual(authority.recent, [])
 
   def test_a_new_request_after_a_closed_window_arms_a_fresh_qr(self):
     first = self.arm()

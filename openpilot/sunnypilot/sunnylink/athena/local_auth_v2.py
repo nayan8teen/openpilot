@@ -31,6 +31,16 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 VERSION = 2
 AUTHENTICATE_PURPOSE = "sunnylink-local-authenticate"
 PAIRING_TTL_S = 120
+# A cloud-delivered enrollment is store-and-forward: the gateway queues the settings-write and the
+# device's local half claims it on a later tick, which is minutes late when the cloud link was down
+# or the device was asleep. The session a code was scanned from therefore stays usable after the
+# code stops being displayed, so the enrollment for the code the user actually scanned can still
+# land. It stays single-use, stays bound to that code, and is dropped the moment the user cancels
+# the window or it outlives this grace.
+PAIRING_DELIVERY_GRACE_S = 600
+# How many codes stay usable for a late delivery. A user who retries gets a fresh code, and the
+# enrollment for the code they scanned first can still be in flight.
+MAX_RECENT_SESSIONS = 3
 MAX_ENROLL_BYTES = 4096
 MAX_GRANTS = 8
 
@@ -218,7 +228,11 @@ class Grant:
 @dataclass(frozen=True)
 class Window:
   nonce: str
+  # How long the code is on the device screen and can be scanned.
   deadline: float
+  # [deadline] plus [PAIRING_DELIVERY_GRACE_S]: how long an enrollment for this code may still
+  # arrive through the cloud after the code itself can no longer be scanned.
+  usable_until: float
   qr: str
 
 
@@ -236,7 +250,12 @@ class LocalAuthority:
     self.clock = clock
     self.lock = threading.RLock()
     self.window: Window | None = None
+    # Codes that are no longer displayed but whose enrollment may still be in flight.
+    self.recent: list[Window] = []
     self.pending: Grant | None = None
+    # The session [pending] was staged from: the grant is committed while that session's delivery
+    # grace lasts even if the code has left the screen.
+    self.pending_session: str | None = None
     self.grants: dict[str, Grant] = {}
     if isinstance(registry, dict) and type(registry.get("v")) is int and registry.get("v") == VERSION and set(registry) == {"v", "grants"}:
       entries = registry["grants"]
@@ -254,9 +273,18 @@ class LocalAuthority:
       algorithm = QR_ES256 if isinstance(self.device_key, ec.EllipticCurvePrivateKey) else QR_RS256
       frame = qr_frame(self.cloud_device_id, key_id_bytes(self.device_key.public_key()), session, PAIRING_TTL_S, algorithm)
       qr = encode64(frame) + "." + encode64(self._sign_frame(frame))
-      self.window = Window(encode64(session), self.clock() + PAIRING_TTL_S, qr)
+      now = self.clock()
+      self.window = Window(encode64(session), now + PAIRING_TTL_S, now + PAIRING_TTL_S + PAIRING_DELIVERY_GRACE_S, qr)
+      self._remember(self.window)
       self.pending = None
+      self.pending_session = None
       return qr
+
+  def _remember(self, window: Window) -> None:
+    """Keep the newest displayed codes usable for a late cloud delivery."""
+    now = self.clock()
+    kept = [w for w in self.recent if w.nonce != window.nonce and now < w.usable_until]
+    self.recent = (kept + [window])[-MAX_RECENT_SESSIONS:]
 
   def _sign_frame(self, frame: bytes) -> bytes:
     """ES256 signs get their raw r||s form, the compact encoding every peer can carry in 86
@@ -267,13 +295,37 @@ class LocalAuthority:
     return self.device_key.sign(frame, padding.PKCS1v15(), hashes.SHA256())
 
   def cancel(self) -> None:
+    """The user cancelled (or the window was replaced): every session it could still be used for
+    is gone, so a scanned-but-undelivered enrollment cannot land after the fact."""
     with self.lock:
       self.window = None
+      self.recent = []
       self.pending = None
+      self.pending_session = None
+
+  def expire(self) -> None:
+    """The code left the device screen: it can no longer be scanned, but an enrollment for it may
+    still be in flight, so only the displayed window is dropped — the session stays in [recent]
+    until its delivery grace ends."""
+    with self.lock:
+      self.window = None
+
+  def prune_sessions(self) -> None:
+    with self.lock:
+      now = self.clock()
+      self.recent = [w for w in self.recent if now < w.usable_until]
 
   def _fresh(self, nonce: str) -> None:
-    if self.window is None or self.clock() >= self.window.deadline or not secrets.compare_digest(self.window.nonce, nonce):
-      raise AuthorizationError("enrollment unavailable")
+    """Accept a session that is displayed now, or was displayed recently enough that an enrollment
+    for it can still be travelling through the cloud ([PAIRING_DELIVERY_GRACE_S])."""
+    now = self.clock()
+    with self.lock:
+      candidates = ([self.window] if self.window is not None else []) + self.recent
+    if not any(w is not None and now < w.usable_until and secrets.compare_digest(w.nonce, nonce) for w in candidates):
+      # Name the reason: this line is the only trace of an enrollment that referenced a code the
+      # device no longer honours, and the difference between "expired" and "never displayed" is
+      # what tells a user to scan a fresh code instead of retrying the same one.
+      raise AuthorizationError("pairing code expired")
 
   def enroll(self, raw: str, origin: Origin) -> Grant:
     if origin is not Origin.CLOUD:
@@ -308,6 +360,7 @@ class LocalAuthority:
       if app_id not in self.grants and len(self.grants) >= MAX_GRANTS:
         raise AuthorizationError("grant limit")
       self.pending = Grant(app_id, public, app_id, name, encode64(secrets.token_bytes(32)))
+      self.pending_session = nonce
       return self.pending
 
   def confirm(self, grant: Grant, tls_peer_key_id: str) -> Grant:
@@ -317,9 +370,11 @@ class LocalAuthority:
         raise AuthorizationError("wrong TLS peer")
       if self.pending != grant:
         raise AuthorizationError("no pending enrollment")
-      if self.window is None:
+      if self.pending_session is None:
         raise AuthorizationError("window closed")
-      self._fresh(self.window.nonce)
+      # The enrollment may have arrived late, so what has to hold is that the session it was scanned
+      # from is still inside its delivery grace — not that the code is still on the screen.
+      self._fresh(self.pending_session)
       updated = self.grants | {grant.key_id: grant}
       self.persist({"v": VERSION, "grants": [g.to_dict() for g in updated.values()]})
       self.grants = updated
