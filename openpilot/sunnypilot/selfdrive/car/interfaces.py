@@ -58,6 +58,8 @@ def _initialize_intelligent_cruise_button_management(CP: structs.CarParams, CP_S
 def _initialize_torque_lateral_control(CI: CarInterfaceBase, CP: structs.CarParams, enforce_torque: bool, nnlc_enabled: bool) -> None:
   if nnlc_enabled or enforce_torque:
     CI.configure_torque_tune(CP.carFingerprint, CP.lateralTuning)
+  else:
+    CP.lateralTuning.init('pid')
 
 
 def _cleanup_unsupported_params(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params: Params | None = None) -> None:

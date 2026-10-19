@@ -20,6 +20,10 @@ def get_controller(car_name):
   CP_SP = CarInterface.get_non_essential_params_sp(CP, car_name)
   CI = CarInterface(CP, CP_SP)
   sunnypilot_interfaces.setup_interfaces(CI)
+  # this test exercises LatControlTorque specifically, so request torque tuning explicitly rather
+  # than relying on the car's default lateral controller
+  if CP.lateralTuning.which() != 'torque':
+    CarInterface.configure_torque_tune(CP.carFingerprint, CP.lateralTuning)
   CP_SP = convert_to_capnp(CP_SP)
   VM = VehicleModel(CP)
   controller = LatControlTorque(CP.as_reader(), CP_SP.as_reader(), CI, DT_CTRL)
