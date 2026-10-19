@@ -468,11 +468,34 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
   laneTurnDirection @0 :TurnDirection;
   leftLaneChangeEdgeBlock @1 :Bool;
   rightLaneChangeEdgeBlock @2 :Bool;
+  laneful @3 :LanefulDebug;
 
   enum TurnDirection {
     none @0;
     turnLeft @1;
     turnRight @2;
+  }
+
+  struct LanefulDebug {
+    valid @0 :Bool;
+    active @1 :Bool;
+    curvatureOffset @2 :Float32;
+    laneCurvature @3 :Float32;
+    requiredCurvature @4 :Float32;
+    predictedCurvature @5 :Float32;
+    baseCurvature @6 :Float32;
+    lookahead @7 :Float32;
+    lateralError @8 :Float32;
+    trust @9 :Float32;
+    saturation @10 :Float32;
+    fitDelta @11 :Float32;
+    sensitivityDelta @12 :Float32;
+    intent @13 :Float32;
+    intentRaw @14 :Float32;
+    intentThreshold @15 :Float32;
+    planDeparture @16 :Float32;
+    planWeight @17 :Float32;
+    intentSource @18 :UInt8;
   }
 }
 

@@ -39,6 +39,7 @@ from openpilot.selfdrive.modeld.modeld import ChestnutGpuState
 
 from openpilot.sunnypilot.modeld_v2.fill_model_msg import fill_model_msg, fill_pose_msg, PublishState, get_curvature_from_output
 from openpilot.sunnypilot.modeld_v2.parse_model_outputs import Parser
+from openpilot.sunnypilot.modeld_v2.laneful import Laneful, LanefulState, LanefulTiming
 from openpilot.sunnypilot.modeld_v2.constants import ModelConstants, Plan
 from openpilot.sunnypilot.modeld_v2.meta_helper import load_meta_constants
 from openpilot.sunnypilot.modeld_v2.camera_offset_helper import CameraOffsetHelper
@@ -103,6 +104,7 @@ class ModelState(ModelStateBase):
     self.MIN_LAT_CONTROL_SPEED = 0.3
     self.PLANPLUS_CONTROL: float = 1.0
     self.chestnut = chestnut
+    self.prev_base_curvature = 0.0
 
     pkl_path = _find_driving_pkl(model_bundle)
     assert pkl_path is not None, f"No driving pkl found for {'chestnut' if chestnut else 'small model'} — all models must be compiled with compile_modeld.py"
@@ -227,8 +229,14 @@ class ModelState(ModelStateBase):
 
     return outputs
 
-  def get_action_from_model(self, model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
-                            lat_action_t: float, long_action_t: float, v_ego: float) -> log.ModelDataV2.Action:
+  def get_base_action(self, model_output: dict[str, np.ndarray], lat_action_t: float,
+                      long_action_t: float, v_ego: float) -> tuple[float, float]:
+    """Return the model's requested (acceleration, curvature) before smoothing.
+
+    Laneful needs the unsmoothed base curvature so its trim does not get fed
+    back into the model's lateral smoothing loop.  Keeping this split also makes
+    the after-smoothing ordering explicit in get_action_from_model().
+    """
     if 'action' not in model_output:
       plan = model_output['plan'][0]
       desired_accel = get_accel_from_plan(plan[:, Plan.VELOCITY][:, 0], plan[:, Plan.ACCELERATION][:, 0], self.constants.T_IDXS,
@@ -240,15 +248,31 @@ class ModelState(ModelStateBase):
     else:
       desired_accel = model_output['action'][0, 1]
       desired_curvature = model_output['action'][0, 0] / (max(1.0, v_ego))**2
+    return float(desired_accel), float(desired_curvature)
+
+  def get_action_from_model(self, model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
+                            lat_action_t: float, long_action_t: float, v_ego: float,
+                            laneful_curvature: float = 0.0,
+                            base_action: tuple[float, float] | None = None) -> log.ModelDataV2.Action:
+    desired_accel, base_curvature = (ModelState.get_base_action(self, model_output, lat_action_t, long_action_t, v_ego)
+                                     if base_action is None else base_action)
 
     stop = v_ego < 0.3 and desired_accel < 0.1
     desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, self.LONG_SMOOTH_SECONDS)
 
+    prev_base = getattr(self, 'prev_base_curvature', prev_action.desiredCurvature)
     if self.generation is not None and self.generation >= 10: # smooth curvature for post FOF models
       if v_ego > self.MIN_LAT_CONTROL_SPEED:
-        desired_curvature = smooth_value(desired_curvature, prev_action.desiredCurvature, self.LAT_SMOOTH_SECONDS)
+        desired_curvature = smooth_value(base_curvature, prev_base, self.LAT_SMOOTH_SECONDS)
       else:
-        desired_curvature = prev_action.desiredCurvature
+        desired_curvature = prev_base
+    else:
+      desired_curvature = base_curvature
+    self.prev_base_curvature = float(desired_curvature)
+
+    # Laneful is applied after the model's lateral smoothing, so its correction
+    # is not filtered and does not become sticky through prev_base_curvature.
+    desired_curvature += laneful_curvature
 
     return log.ModelDataV2.Action(desiredCurvature=float(desired_curvature), desiredAcceleration=float(desired_accel), shouldStop=bool(stop))
 
@@ -366,6 +390,8 @@ def main(demo=False):
   DH = DesireHelper()
   meta_constants = load_meta_constants()
   RELC = RoadEdgeLaneChangeController()
+  laneful = Laneful()
+  laneful_strength = 0.0
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
@@ -405,10 +431,15 @@ def main(demo=False):
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["narrowRoadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)
+    lat_active = bool(sm['carControl'].latActive)
+    laneful_state = LanefulState(v_ego=v_ego, curvature=float(sm['controlsState'].curvature),
+                                 lat_active=lat_active, steering_pressed=bool(sm['carState'].steeringPressed),
+                                 t_mono=time.monotonic())
     if sm.frame % 60 == 0:
       model.lat_delay = get_lat_delay(params, sm["lateralDelay"].lateralDelay)
       model.PLANPLUS_CONTROL = params.get("PlanplusControl", return_default=True)
       camera_offset_helper.set_offset(params.get("CameraOffset", return_default=True))
+      laneful_strength = params.get("LanefulStrength", return_default=True)
     lat_delay = model.lat_delay + model.LAT_SMOOTH_SECONDS
     if sm.updated["extrinsicsCalibration"] and sm.seen['narrowRoadCameraState'] and sm.seen['deviceState']:
       device_from_calib_euler = np.array(sm["extrinsicsCalibration"].rpyCalib, dtype=np.float32)
@@ -480,9 +511,23 @@ def main(demo=False):
       posenet_send = messaging.new_message('cameraOdometry')
       mdv2sp_send = messaging.new_message('modelDataV2SP')
 
-      if not sm['carControl'].latActive:
+      if not lat_active:
         prev_action.desiredCurvature = sm['controlsState'].curvature
-      action = model.get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego)
+        model.prev_base_curvature = sm['controlsState'].curvature
+        laneful.reset()
+
+      base_accel, base_curvature = model.get_base_action(model_output, lat_action_t, long_action_t, v_ego)
+      laneful_out = laneful.update(
+        model_output, laneful_state,
+        LanefulTiming(frame_age=frame_delay, model_exec=model_execution_time,
+                      lat_delay=max(0.0, model.lat_delay), action_delay=action_delay),
+        base_curvature=base_curvature, prev_curvature=float(prev_action.desiredCurvature),
+        strength=laneful_strength,
+        desire_active=desire != log.Desire.none or DH.lane_change_state != log.LaneChangeState.off,
+      )
+      action = model.get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego,
+                                           laneful_out.curvature_offset,
+                                           base_action=(base_accel, base_curvature))
       prev_action = action
       fill_model_msg(drivingdata_send, modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,
@@ -499,6 +544,26 @@ def main(demo=False):
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
       mdv2sp_send.valid = modelv2_send.valid
       mdv2sp_send.modelDataV2SP.laneTurnDirection = DH.lane_turn_direction
+      laneful_msg = mdv2sp_send.modelDataV2SP.laneful
+      laneful_msg.valid = laneful_out.valid
+      laneful_msg.active = laneful_out.valid and laneful_strength > 0.0 and lat_active
+      laneful_msg.curvatureOffset = laneful_out.curvature_offset
+      laneful_msg.laneCurvature = laneful_out.lane_curvature
+      laneful_msg.requiredCurvature = laneful_out.required_curvature
+      laneful_msg.predictedCurvature = laneful_out.predicted_curvature
+      laneful_msg.baseCurvature = laneful_out.base_curvature
+      laneful_msg.lookahead = laneful_out.lookahead
+      laneful_msg.lateralError = laneful_out.lateral_error
+      laneful_msg.trust = laneful_out.trust
+      laneful_msg.saturation = laneful_out.saturation
+      laneful_msg.fitDelta = laneful_out.fit_delta
+      laneful_msg.sensitivityDelta = laneful_out.sensitivity_delta
+      laneful_msg.intent = laneful_out.intent
+      laneful_msg.intentRaw = laneful_out.intent_raw
+      laneful_msg.intentThreshold = laneful_out.intent_threshold
+      laneful_msg.planDeparture = laneful_out.plan_departure
+      laneful_msg.planWeight = laneful_out.plan_weight
+      laneful_msg.intentSource = laneful_out.intent_source
       drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
       drivingdata_send.drivingModelData.meta.laneChangeDirection = DH.lane_change_direction
 
@@ -507,6 +572,8 @@ def main(demo=False):
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)
       pm.send('modelDataV2SP', mdv2sp_send)
+    else:
+      laneful.reset()
     last_vipc_frame_id = meta_main.frame_id
 
 if __name__ == "__main__":
