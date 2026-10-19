@@ -23,15 +23,20 @@ from openpilot.sunnypilot.selfdrive.car import interfaces as sunnypilot_interfac
 
 class TestLatControl(OpenpilotTestCase):
 
-  @parameterized.expand([(HONDA.HONDA_CIVIC, LatControlPID), (TOYOTA.TOYOTA_RAV4, LatControlTorque),
-                         (NISSAN.NISSAN_LEAF, LatControlAngle), (GM.CHEVROLET_BOLT_EUV, LatControlTorque),
-                         (VOLKSWAGEN.VOLKSWAGEN_ID4_MK2, LatControlCurvature)])
-  def test_saturation(self, car_name, controller):
+  # every non-angle car now routes through the PID controller; the last case keeps coverage of the
+  # torque path, which is still reachable when torque tuning is explicitly configured
+  @parameterized.expand([(HONDA.HONDA_CIVIC, LatControlPID, False), (TOYOTA.TOYOTA_RAV4, LatControlPID, False),
+                         (NISSAN.NISSAN_LEAF, LatControlAngle, False), (GM.CHEVROLET_BOLT_EUV, LatControlPID, False),
+                         (VOLKSWAGEN.VOLKSWAGEN_ID4_MK2, LatControlCurvature, False),
+                         (TOYOTA.TOYOTA_RAV4, LatControlTorque, True)])
+  def test_saturation(self, car_name, controller, torque_tune):
     CarInterface = interfaces[car_name]
     CP = CarInterface.get_non_essential_params(car_name)
     CP_SP = CarInterface.get_non_essential_params_sp(CP, car_name)
     CI = CarInterface(CP, CP_SP)
     sunnypilot_interfaces.setup_interfaces(CI)
+    if torque_tune:
+      CarInterface.configure_torque_tune(CP.carFingerprint, CP.lateralTuning)
     CP_SP = convert_to_capnp(CP_SP)
     VM = VehicleModel(CP)
 
