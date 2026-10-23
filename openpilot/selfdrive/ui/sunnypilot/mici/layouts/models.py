@@ -11,7 +11,7 @@ import pyray as rl
 from openpilot.cereal import custom
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigConfirmationDialog, BigDialog
 from openpilot.sunnypilot.models.helpers import ACTIVE_BUNDLE_KEYS, get_selected_bundle
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl
 from openpilot.selfdrive.ui.ui_state import ui_state, device
 from openpilot.selfdrive.ui.sunnypilot.model_info import (active_source, big_model_state, bundles_for_source, carrying_model,
                                                            default_model_name, model_cache_size_mb, model_info, queued_name,
@@ -95,7 +95,12 @@ class ModelsLayoutMici(NavScroller):
     self.clear_cache_btn.set_click_callback(self._confirm_clear_cache)
     self._cache_size_time = 0.0
 
-    self.main_items = [self.current_model_info, self.select_model_btn, self.cancel_download_btn, self.refresh_btn, self.clear_cache_btn]
+    self.blendful_toggle = BigParamControl("blendful", "Blendful",
+                                           description="Nudges the car toward the lane center when the lane lines are clear.\n" +
+                                                       "Drives laneless when they are not.")
+
+    self.main_items = [self.current_model_info, self.select_model_btn, self.cancel_download_btn, self.refresh_btn, self.clear_cache_btn,
+                       self.blendful_toggle]
     self._scroller.add_widgets(self.main_items)
 
   @property
@@ -205,6 +210,10 @@ class ModelsLayoutMici(NavScroller):
       device.set_override_interactive_timeout(None)
       self._was_downloading = False
 
+  def show_event(self):
+    super().show_event()
+    self.blendful_toggle.refresh()
+
   def _update_state(self):
     super()._update_state()
 
@@ -257,6 +266,7 @@ class ModelsLayoutMici(NavScroller):
       count = 0
       verifying = False
       canceling = False
+      speed = 0.0
       for model in manager.selectedBundle.models:
         count += 1
         p = model.artifact.downloadProgress
@@ -265,6 +275,7 @@ class ModelsLayoutMici(NavScroller):
           progress += p.progress
           verifying = verifying or p.status == custom.ModelManagerSP.DownloadStatus.verifying
           canceling = canceling or p.canceling
+          speed = max(speed, p.speed)  # only one file downloads at a time, so the non-zero speed is the live one
         elif p.status in (custom.ModelManagerSP.DownloadStatus.downloaded,
                           custom.ModelManagerSP.DownloadStatus.cached):
           progress += 100.0
@@ -279,7 +290,10 @@ class ModelsLayoutMici(NavScroller):
       self.current_model_info.current_model_text.set_text(name_text)
       self.current_model_info.info_header.set_text(tr("progress") + self._download_progress)
       self.current_model_info.info_header._shimmer = True
-      self.current_model_info.info_text.set_text(f"{progress/count:.2f}%")
+      progress_text = f"{progress/count:.2f}%"
+      if not verifying and not canceling:
+        progress_text += f"  |  {speed / 1024 ** 2:.1f} MB/s" if speed > 0 else "  |  --.- MB/s"
+      self.current_model_info.info_text.set_text(progress_text)
 
     elif manager.selectedBundle and manager.selectedBundle.status == custom.ModelManagerSP.DownloadStatus.downloaded:
       self.current_model_info.info_header.set_text(tr("downloaded"))
