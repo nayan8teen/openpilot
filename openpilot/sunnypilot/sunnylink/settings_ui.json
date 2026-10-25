@@ -2098,12 +2098,6 @@
           "description": "Neural network lateral control for supported models",
           "items": [
             {
-              "key": "LanefulEnabled",
-              "widget": "toggle",
-              "title": "Laneful Lane Centering",
-              "description": "Nudge the car toward lane center from the model's lane lines. On an unmarked two-lane road it centers in the right half of the road instead."
-            },
-            {
               "key": "NeuralNetworkLateralControl",
               "widget": "toggle",
               "title": "Neural Network Lateral Control (NNLC)",
