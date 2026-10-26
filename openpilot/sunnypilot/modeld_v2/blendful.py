@@ -50,7 +50,7 @@ class Blendful:
     self.model_curvature = model_curvature
     target = 0.0 if fading else self._target(model_output, v_ego, model_curvature)
     target = self.smooth = self.smooth + (target - self.smooth) * DT_MDL / (DT_MDL + np.interp(abs(model_curvature) * v_ego ** 2, [0.18, 0.53], [0.5, 0.0]))
-    build = 0.5 / max(v_ego, 1.0) ** 2 * DT_MDL  # jerk over 1 second
+    build = 0.8 / max(v_ego, 1.0) ** 2 * DT_MDL  # jerk over 1 second
     release = (0.5 if fading else 2.0) / max(v_ego, 1.0) ** 2 * DT_MDL  # lets go fast, but past zero it builds like any other pull
     k = self.curvature
     self.curvature = float(np.clip(target, max(k - release, -build) if k > 0 else k - build, min(k + release, build) if k < 0 else k + build))
@@ -61,7 +61,7 @@ class Blendful:
     lines = model_output['lane_lines'][0, :, :, 0]
     stds = model_output['lane_lines_stds'][0, :, :, 0]
 
-    lone_weight = np.interp(abs(model_curvature) * v_ego ** 2, [0.18, 0.53], [0.5, 1.0])  # 0.5 on straights, 1.0 in curves
+    lone_weight = np.interp(abs(model_curvature) * v_ego ** 2, [0.10, 0.30], [0.5, 1.0])  # 0.5 on straights, 1.0 in curves
     probs = self.line_probs.update(model_output['lane_lines_prob'][0, 1::2][1:3])
     absent = (probs < 0.3) & (lone_weight > 0.5)
     gone = self.line_gone.update((model_output['lane_lines_prob'][0, 1::2][1:3] < 0.3).astype(float))
@@ -103,7 +103,7 @@ class Blendful:
 
     # Fit curvature to place the plant in center: e ~ dk x^2 / 2
     plan_x = np.interp(x, model_output['plan'][0, :, 0], model_output['plan'][0, :, 1])
-    plan_share = np.interp(abs(model_curvature) * lookahead ** 2 / 2, [0.5, 2.0], [0.3, 0.5]) # blending up to 50% plan with action during sharp curvature
+    plan_share = np.interp(abs(model_curvature) * lookahead ** 2 / 2, [1.0, 4.0], [0.15, 0.3]) # blending up to 50% plan with action during sharp curvature
     error = np.clip(center - ((1 - plan_share) * model_curvature * x ** 2 / 2 + plan_share * plan_x), -1.0, 1.0)
     dk = 2.0 * np.sum(weight * error * x ** 2) / np.sum(weight * x ** 4)
 
