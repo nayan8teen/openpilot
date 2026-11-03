@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from websocket import WebSocket, WebSocketTimeoutException
 
+import openpilot.cereal.messaging as messaging
 from openpilot.system.athena.rpc import dispatcher
 from openpilot.system.athena import rpc as rpc_module
 from openpilot.common.realtime import set_core_affinity
@@ -27,6 +28,7 @@ from openpilot.sunnypilot.sunnylink.athena.local_auth import (
 )
 from openpilot.sunnypilot.sunnylink.athena.local_discovery import LocalDiscovery
 from openpilot.sunnypilot.sunnylink.athena.local_params import is_local_param
+from openpilot.sunnypilot.sunnylink.athena.local_trip import DISENGAGED, TripTracker, derive_status
 from openpilot.sunnypilot.sunnylink.athena.sunnylinkd import SUNNYLINK_RECONNECT_TIMEOUT_S, Sunnylinkd, log_connection_error
 
 LOCAL_ENABLED_PARAM = "SunnylinkLocalEnabled"
@@ -36,6 +38,11 @@ ENDPOINT_BACKOFF_S = float(TICK_INTERVAL_S)
 ENDPOINT_BACKOFF_MAX_S = 60.0
 BACKOFF_FORGET_S = 12.0
 MAX_LOCAL_SESSIONS = 8
+
+# Trip tracking runs independently of any session: a phone can dial mid-drive, and a trip that
+# started before it did must still be there when it asks.
+TRIP_TICK_S = 0.1
+TRIP_SERVICES = ['deviceState', 'carState', 'selfdriveState', 'selfdriveStateSP', 'onroadEvents']
 
 
 class LocalSunnylinkd(Sunnylinkd):
@@ -48,6 +55,8 @@ class LocalSunnylinkd(Sunnylinkd):
     self.stop_event = threading.Event()
     self._state_lock = threading.Lock()
     self._workers: dict[str, threading.Thread] = {}
+    self.trip = TripTracker()
+    self._trip_lock = threading.Lock()
 
   def enrolled(self) -> bool:
     return bool(local_auth_daemon.grants()) or local_auth_daemon.pending_enrollment() is not None
@@ -66,6 +75,7 @@ class LocalSunnylinkd(Sunnylinkd):
   def run(self, exit_event: threading.Event | None = None) -> None:
     self.discovery.start()
     threading.Thread(target=self._tick_loop, name="localsunnylinkd_tick", daemon=True).start()
+    threading.Thread(target=self._trip_loop, name="localsunnylinkd_trip", daemon=True).start()
 
     try:
       while (exit_event is None or not exit_event.is_set()) and self.serviceable():
@@ -83,6 +93,73 @@ class LocalSunnylinkd(Sunnylinkd):
         local_auth_daemon.claim_cloud_commands()
       except Exception:
         cloudlog.exception("sunnylinkd.local.tick_failed")
+
+  def _trip_loop(self) -> None:
+    """Accumulate the current trip for the phone, independent of any session.
+
+    Runs for as long as local mode does and keeps answering `getTripSummary` from the latest
+    state, so a trip that started before a phone connected is complete when it does.
+    """
+    try:
+      sm = messaging.SubMaster(TRIP_SERVICES)
+    except Exception:
+      cloudlog.exception("sunnylinkd.local.trip.submaster_failed")
+      return
+    with self._trip_lock:
+      self.trip.car_name = self._car_name()
+    while not self.stop_event.wait(TRIP_TICK_S):
+      try:
+        sample = self._trip_sample(sm)
+        with self._trip_lock:
+          self.trip.update(**sample)
+      except Exception:
+        # A tracker that dies must not take the whole local daemon (and with it the phone's
+        # settings path) down: getTripSummary answers whatever it has.
+        cloudlog.exception("sunnylinkd.local.trip.update_failed")
+
+  def _trip_sample(self, sm) -> dict:
+    sm.update(0)
+    car_ok = sm.valid['carState']
+    started = bool(sm['deviceState'].started) if sm.valid['deviceState'] else False
+    gear = str(sm['carState'].gearShifter) if car_ok else None
+    v_ego = float(sm['carState'].vEgo) if car_ok else 0.0
+    return {"now": time.monotonic(), "status": self._trip_status(sm), "v_ego": v_ego,
+            "gear": gear, "started": started}
+
+  def _trip_status(self, sm) -> str:
+    if not sm.valid['selfdriveState']:
+      return DISENGAGED
+    ss = sm['selfdriveState']
+    mads = sm['selfdriveStateSP'].mads if sm.valid['selfdriveStateSP'] else None
+    override_longitudinal = any(e.overrideLongitudinal for e in sm['onroadEvents']) if sm.valid['onroadEvents'] else False
+    return derive_status(
+      ss_state=str(ss.state),
+      ss_enabled=bool(ss.enabled),
+      mads_available=bool(mads.available) if mads is not None else False,
+      mads_enabled=bool(mads.enabled) if mads is not None else False,
+      mads_state=str(mads.state) if mads is not None else "",
+      override_longitudinal=override_longitudinal,
+    )
+
+  def _car_name(self) -> str:
+    try:
+      from opendbc.car.structs import car
+      raw = self.params.get("CarParamsPersistent")
+      if raw is None:
+        return ""
+      return str(messaging.log_from_bytes(raw, car.CarParams).carFingerprint)
+    except Exception:
+      return ""
+
+  def trip_summary(self) -> dict:
+    """`getTripSummary`: the active trip plus the finished ring, SI units, newest first."""
+    try:
+      metric = self.params.get_bool("IsMetric")
+    except Exception:
+      cloudlog.exception("sunnylinkd.local.trip.metric_failed")
+      metric = True
+    with self._trip_lock:
+      return self.trip.snapshot(metric)
 
   def known_app_ids(self) -> set[str]:
     ids = {g["app_id"] for g in local_auth_daemon.grants()}
@@ -311,7 +388,8 @@ class LocalSunnylinkd(Sunnylinkd):
         return {"success": False, "error": "invalid alias"}
       return {"success": True, "updated": True}
 
-    local = {"unpairLocalApp": unpair_local_app, "updateLocalAppAlias": update_local_app_alias}
+    local = {"unpairLocalApp": unpair_local_app, "updateLocalAppAlias": update_local_app_alias,
+             "getTripSummary": self.trip_summary}
     surface = self.methods()
     methods: dict[str, Callable[..., object]] = {}
     for name in LOCAL_METHODS:

@@ -36,7 +36,7 @@ MAX_ENROLL_BYTES = 4096
 MAX_GRANTS = 8
 
 LOCAL_METHODS = frozenset({"getParams", "getParamsAllKeys", "getParamsMetadata", "getMessage", "saveParams",
-                           "updateLocalAppAlias", "unpairLocalApp"})
+                           "updateLocalAppAlias", "unpairLocalApp", "getTripSummary"})
 _TOKEN = re.compile(r"[A-Za-z0-9_-]+\Z")
 
 
